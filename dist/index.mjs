@@ -42238,86 +42238,29 @@ module.exports = axios;
 
 /***/ }),
 
-/***/ 1711:
-/***/ ((__webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+/***/ 4852:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
-__nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   "K": () => (/* binding */ run)
+/* harmony export */   "Nd": () => (/* binding */ extractPullRequests),
+/* harmony export */   "al": () => (/* binding */ getPullRequestStatus),
+/* harmony export */   "zp": () => (/* binding */ getReviewReactions)
 /* harmony export */ });
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(2186);
 /* harmony import */ var _actions_github__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(5438);
-/* harmony import */ var _slack_web_api__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(431);
-/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(7147);
 
 
 
+/** @typedef {import('./workflow.mjs').ReactionConfig} ReactionConfig */
 
-
-/** @typedef {import('@slack/web-api/dist/types/response/ChannelsHistoryResponse').Message} SlackMessage */
 /** @typedef {ReturnType<getOctokit>} OctokitClient */
-/** @typedef {WebClient} SlackClient */
 /**
  * @typedef {Object} PullRequest
  * @property {string} owner
  * @property {string} repo
  * @property {string} pull_number
  */
-/**
- * @typedef {Object} ReactionConfig
- * @property {Array<string>} approved
- * @property {Array<string>} merged
- * @property {Array<string>} closed
- * @property {Array<string>} changesRequested
- */
-/**
- * @typedef {Object} ChannelConfig
- * @property {string} channelId
- * @property {number} limit
- */
-/**
- * @typedef {Object} PrMessage
- * @property {string} permalink
- * @property {Array<string>} reactions
- */
-async function run() {
-  try {
-    const { reactionConfig, channelConfig } = getConfig();
-    for (let { channelId, limit } of channelConfig) {
-      const messagesForChannel = [];
-      for (let message of getMessages(channelId, limit)) {
-        const pullRequests = getPullRequests(message);
-
-        if (!shouldProcess(message, pullRequests, reactionConfig)) {
-          continue;
-        }
-
-        const status = await getAggregateStatus(pullRequests);
-        if (['closed', 'merged'].includes(status)) {
-          console.debug(`RESOLVING: ${message.ts} is ${status}`);
-          await addReaction(channelId, message.ts, reactionConfig[status][0]);
-          continue;
-        }
-
-        messagesForChannel.push(
-          await buildPrMessage(channelId, message, pullRequests[0], reactionConfig)
-        );
-      }
-      await postOpenPrs(channelId, messagesForChannel);
-    }
-  } catch (error) {
-    (0,_actions_core__WEBPACK_IMPORTED_MODULE_0__.setFailed)(error.message);
-  }
-}
-
-/** @type {SlackClient} */
-let _slackClient;
-function slackClient() {
-  if (!_slackClient) {
-    _slackClient = new _slack_web_api__WEBPACK_IMPORTED_MODULE_2__.WebClient((0,_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput)("slack-token"));
-  }
-  return _slackClient;
-}
+/** @typedef {'open' | 'closed' | 'merged'} PullRequestStatus */
 
 /** @type {OctokitClient} */
 let _octokitClient;
@@ -42328,28 +42271,12 @@ function octokitClient() {
   return _octokitClient;
 }
 
-async function getChannels() {
-  const slackChannelConfigFile = getInput('slack-channel-config', { required: true });
-
-  const jsonData = (slackChannelConfigFile && fs.existsSync(slackChannelConfigFile))
-    ? JSON.parse(fs.readFileSync(slackChannelConfigFile, 'utf-8'))
-    : {};
-
-  return Object.keys(jsonData)
-    .map(it => ({
-      channelId: it.channelId,
-      limit: it.limit ?? 50
-    }))
-    .filter(it => it.channelId);
-}
-
 /**
- * 
- * @param {SlackMessage} message 
+ * @param {string?} text
  * @returns {PullRequest[]}
  */
-function getPullRequests(message) {
-  const matches = [...message.text?.matchAll(/https:\/\/github.com\/(?<owner>[\w.-]+)\/(?<repo>[\w.-]+)\/pull\/(?<pull_number>\d+)/g)];
+function extractPullRequests(text) {
+  const matches = [...text?.matchAll(/https:\/\/github.com\/(?<owner>[\w.-]+)\/(?<repo>[\w.-]+)\/pull\/(?<pull_number>\d+)/g)];
 
   return matches.map(it => ({
     owner: it.groups.owner,
@@ -42358,118 +42285,13 @@ function getPullRequests(message) {
   }));
 }
 
-/**
- * @param {SlackMessage} message
- * @param {Array<PullRequest>} pullRequests
- * @param {ReactionConfig} reactionConfig
- */
-function shouldProcess(message, pullRequests, reactionConfig) {
-  if (pullRequests.length === 0) {
-    console.debug(`SKIPPING: ${message.ts} has no pull requests`);
-    return false;
-  } else if (pullRequests.length > 1) {
-    console.warn(`WARNING: ${message.ts} has multiple pull requests`);
-  }
-
-  if (message.bot_id) {
-    console.debug(`SKIPPING: ${message.ts} is a bot message`);
-    return false;
-  }
-
-  if (isResolved(message, reactionConfig)) {
-    console.debug(`SKIPPING: ${message.ts} is already resolved`);
-    return false;
-  }
-
-  return true;
-}
-
-function isResolved(message, reactionConfig) {
-  const resolvedStatuses = [reactionConfig.approved, reactionConfig.merged, reactionConfig.closed];
-
-  return message.reactions?.some(reaction =>
-    reactionConfig.merged.includes(reaction.name)) ||
-    resolvedStatuses.some(status => message.text?.includes(status));
-}
-
-/**
- * Get the last {limit} messages from {channelId} in ascending order.
- * 
- * @param {string} channelId
- * @param {number} limit
- */
-async function getMessages(channelId, limit) {
-  const history = await slackClient().conversations.history({
-    channel: channelId,
-    limit
-  });
-  return (history.messages ?? [])
-    .sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
-}
-
-function getConfig() {
-  const configFile = (0,_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput)('config-file', { required: true });
-
-  const jsonData = (configFile && fs__WEBPACK_IMPORTED_MODULE_3__.existsSync(configFile))
-    ? JSON.parse(fs__WEBPACK_IMPORTED_MODULE_3__.readFileSync(configFile, 'utf-8'))
-    : {};
-
-  const rawReactionConfig = jsonData.reactions ?? {};
-  /** @type {ReactionConfig} */
-  const reactionConfig = {
-    approved: rawReactionConfig.approved ?? ['approved'],
-    merged: rawReactionConfig.merged ?? ['merged'],
-    closed: rawReactionConfig.closed ?? ['closed'],
-    changesRequested: rawReactionConfig.changesRequested ?? ['changesRequested']
-  };
-
-  const rawChannelConfig = jsonData.channels ?? {};
-  /** @type {Array<ChannelConfig>} */
-  const channelConfig = Object.keys(rawChannelConfig)
-    .map(it => ({
-      channelId: it.channelId,
-      limit: it.limit ?? 50
-    }))
-    .filter(it => it.channelId);
-
-  return {
-    reactionConfig,
-    channelConfig
-  };
-}
-
-/** @typedef {'open' | 'closed' | 'merged'} PullRequestStatus */
-async function getAggregateStatus(pullRequests) {
-  /** @type {Array<PullRequestStatus>} */
-  const statuses = await Promise.all(pullRequests.map(pr => getStatus(pr)))
-  const distinctStatuses = distinct(statuses);
-
-  if (distinctStatuses.includes('open')) {
-    return 'open';
-  } else if (distinctStatuses.includes('merged')) {
-    return 'merged';
-  } else {
-    return 'closed';
-  }
-}
-
-/**
- * @template T
- * @param {Array<T>} array 
- * @returns {Array<T>}
- */
-function distinct(array) {
-  return [...new Set(array)];
-}
-
 /** @type {Map<string, PullRequestStatus>} */
 const _pullRequestCache = new Map();
 /**
- * 
  * @param {PullRequest} pullRequest 
  * @returns {Promise<PullRequestStatus>}
  */
-async function getStatus(pullRequest) {
+async function getPullRequestStatus(pullRequest) {
   const cacheKey = `${pullRequest.owner}/${pullRequest.repo}/${pullRequest.pull_number}`;
   if (_pullRequestCache.has(cacheKey)) {
     return _pullRequestCache.get(cacheKey);
@@ -42492,41 +42314,6 @@ async function getStatus(pullRequest) {
       console.error(`Failed to get status for ${cacheKey}: ${error}`);
       return 'open';
     });
-}
-
-function addReaction(channelId, messageTs, reaction) {
-  return slackClient().reactions.add({
-    name: reaction,
-    channel: channelId,
-    timestamp: messageTs
-  });
-}
-
-function getPermalink(channelId, messageTs) {
-  return slackClient().chat.getPermalink({
-    channel: channelId,
-    message_ts: messageTs
-  }).then(response => response.permalink);
-}
-
-/**
- * 
- * @param {SlackMessage} message
- * @param {PullRequest} pullRequest 
- * @returns {Promise<PrMessage>}
- */
-async function buildPrMessage(channelId, message, pullRequest, reactionConfig) {
-  const existingReactions = (message.reactions ?? [])
-    .map(reaction => reaction.name)
-    .filter(it => it);
-  const reviewReactions = await getReviewReactions(pullRequest, reactionConfig);
-  const allReactions = distinct([...existingReactions, ...reviewReactions]);
-  const permalink = await getPermalink(channelId, message.ts);
-
-  return {
-    permalink,
-    reactions: allReactions,
-  };
 }
 
 /** @type {Map<string, Array<string>} */
@@ -42561,6 +42348,118 @@ async function getReviewReactions(pullRequest, reactionConfig) {
       return reviewReactions;
     })
     .catch(_ => []);
+}
+
+
+/***/ }),
+
+/***/ 1711:
+/***/ ((__webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+__nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   "K": () => (/* binding */ run)
+/* harmony export */ });
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(2186);
+/* harmony import */ var _workflow_mjs__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(6097);
+/* harmony import */ var _slack_mjs__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(8223);
+/* harmony import */ var _github_mjs__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(4852);
+
+
+
+
+
+async function run() {
+  try {
+    const { reactionConfig, channelConfig } = (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .getConfig */ .iE)();
+    for (let { channelId, limit } of channelConfig) {
+      const messagesForChannel = [];
+      for (let message of (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .getMessages */ ._U)(channelId, limit)) {
+        const pullRequests = (0,_github_mjs__WEBPACK_IMPORTED_MODULE_3__/* .extractPullRequests */ .Nd)(message);
+
+        if (!(0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .shouldProcess */ .VM)(message, pullRequests, reactionConfig)) {
+          continue;
+        }
+
+        const status = await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .getAggregateStatus */ .di)(pullRequests);
+        if (['closed', 'merged'].includes(status)) {
+          console.debug(`RESOLVING: ${message.ts} is ${status}`);
+          await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .addReaction */ .rU)(channelId, message.ts, reactionConfig[status][0]);
+          continue;
+        }
+
+        messagesForChannel.push(
+          await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .buildPrMessage */ .wB)(channelId, message, pullRequests[0], reactionConfig)
+        );
+      }
+      await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .JZ)(channelId, messagesForChannel);
+    }
+  } catch (error) {
+    (0,_actions_core__WEBPACK_IMPORTED_MODULE_0__.setFailed)(error.message);
+  }
+}
+
+await run();
+
+__webpack_async_result__();
+} catch(e) { __webpack_async_result__(e); } }, 1);
+
+/***/ }),
+
+/***/ 8223:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   "JZ": () => (/* binding */ postOpenPrs),
+/* harmony export */   "_U": () => (/* binding */ getMessages),
+/* harmony export */   "rU": () => (/* binding */ addReaction),
+/* harmony export */   "t5": () => (/* binding */ getPermalink)
+/* harmony export */ });
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(2186);
+/* harmony import */ var _slack_web_api__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(431);
+
+
+
+/** @typedef {WebClient} SlackClient */
+/** @typedef {import('@slack/web-api/dist/types/response/ChannelsHistoryResponse').Message} SlackMessage */
+
+/** @type {SlackClient} */
+let _slackClient;
+function slackClient() {
+  if (!_slackClient) {
+    _slackClient = new _slack_web_api__WEBPACK_IMPORTED_MODULE_1__.WebClient((0,_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput)("slack-token"));
+  }
+  return _slackClient;
+}
+
+/**
+ * Get the last {limit} messages from {channelId} in ascending order.
+ * 
+ * @param {string} channelId
+ * @param {number} limit
+ */
+async function getMessages(channelId, limit) {
+  const history = await slackClient().conversations.history({
+    channel: channelId,
+    limit
+  });
+  return (history.messages ?? [])
+    .sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
+}
+
+function addReaction(channelId, messageTs, reaction) {
+  return slackClient().reactions.add({
+    name: reaction,
+    channel: channelId,
+    timestamp: messageTs
+  });
+}
+
+function getPermalink(channelId, messageTs) {
+  return slackClient().chat.getPermalink({
+    channel: channelId,
+    message_ts: messageTs
+  }).then(response => response.permalink);
 }
 
 async function postOpenPrs(channelId, messages) {
@@ -42604,9 +42503,170 @@ async function postPrMessage(channelId, threadId, message) {
   });
 }
 
-await run();
-__webpack_async_result__();
-} catch(e) { __webpack_async_result__(e); } }, 1);
+
+/***/ }),
+
+/***/ 6097:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+
+// EXPORTS
+__nccwpck_require__.d(__webpack_exports__, {
+  "wB": () => (/* binding */ buildPrMessage),
+  "di": () => (/* binding */ getAggregateStatus),
+  "iE": () => (/* binding */ getConfig),
+  "VM": () => (/* binding */ shouldProcess)
+});
+
+// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
+var core = __nccwpck_require__(2186);
+// EXTERNAL MODULE: external "fs"
+var external_fs_ = __nccwpck_require__(7147);
+// EXTERNAL MODULE: ./src/github.mjs
+var github = __nccwpck_require__(4852);
+// EXTERNAL MODULE: ./src/slack.mjs
+var slack = __nccwpck_require__(8223);
+;// CONCATENATED MODULE: ./src/utils.mjs
+/**
+ * @template T
+ * @param {Array<T>} array 
+ * @returns {Array<T>}
+ */
+function distinct(array) {
+  return [...new Set(array)];
+}
+;// CONCATENATED MODULE: ./src/workflow.mjs
+
+
+
+
+
+
+/** @typedef {import('./slack.mjs').SlackMessage} SlackMessage */
+/** @typedef {import('./github.mjs').PullRequest} PullRequest */
+/** @typedef {import('./github.mjs').PullRequestStatus} PullRequestStatus */
+
+/**
+ * @typedef {Object} ReactionConfig
+ * @property {Array<string>} approved
+ * @property {Array<string>} merged
+ * @property {Array<string>} closed
+ * @property {Array<string>} changesRequested
+ */
+/**
+ * @typedef {Object} ChannelConfig
+ * @property {string} channelId
+ * @property {number} limit
+ */
+/**
+ * @typedef {Object} PrMessage
+ * @property {string} permalink
+ * @property {Array<string>} reactions
+ */
+
+function getConfig() {
+  const configFile = (0,core.getInput)('config-file', { required: true });
+
+  const jsonData = (configFile && external_fs_.existsSync(configFile))
+    ? JSON.parse(external_fs_.readFileSync(configFile, 'utf-8'))
+    : {};
+
+  const rawReactionConfig = jsonData.reactions ?? {};
+  /** @type {ReactionConfig} */
+  const reactionConfig = {
+    approved: rawReactionConfig.approved ?? ['approved'],
+    merged: rawReactionConfig.merged ?? ['merged'],
+    closed: rawReactionConfig.closed ?? ['closed'],
+    changesRequested: rawReactionConfig.changesRequested ?? ['changesRequested']
+  };
+
+  const rawChannelConfig = jsonData.channels ?? {};
+  /** @type {Array<ChannelConfig>} */
+  const channelConfig = Object.keys(rawChannelConfig)
+    .map(it => ({
+      channelId: it.channelId,
+      limit: it.limit ?? 50
+    }))
+    .filter(it => it.channelId);
+
+  return {
+    reactionConfig,
+    channelConfig
+  };
+}
+
+async function getAggregateStatus(pullRequests) {
+  /** @type {Array<PullRequestStatus>} */
+  const statuses = await Promise.all(pullRequests.map(pr => (0,github/* getPullRequestStatus */.al)(pr)))
+  const distinctStatuses = distinct(statuses);
+
+  if (distinctStatuses.includes('open')) {
+    return 'open';
+  } else if (distinctStatuses.includes('merged')) {
+    return 'merged';
+  } else {
+    return 'closed';
+  }
+}
+
+/**
+ * @param {SlackMessage} message
+ * @param {Array<PullRequest>} pullRequests
+ * @param {ReactionConfig} reactionConfig
+ */
+function shouldProcess(message, pullRequests, reactionConfig) {
+  if (pullRequests.length === 0) {
+    console.debug(`SKIPPING: ${message.ts} has no pull requests`);
+    return false;
+  } else if (pullRequests.length > 1) {
+    console.warn(`WARNING: ${message.ts} has multiple pull requests`);
+  }
+
+  if (message.bot_id) {
+    console.debug(`SKIPPING: ${message.ts} is a bot message`);
+    return false;
+  }
+
+  if (isResolved(message, reactionConfig)) {
+    console.debug(`SKIPPING: ${message.ts} is already resolved`);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * @param {SlackMessage} message
+ * @param {ReactionConfig} reactionConfig
+ */
+function isResolved(message, reactionConfig) {
+  const resolvedStatuses = [...reactionConfig.merged, ...reactionConfig.closed];
+
+  return message.reactions?.some(reaction => resolvedStatuses.includes(reaction.name));
+}
+
+/**
+ * @param {string} channelId
+ * @param {SlackMessage} message
+ * @param {PullRequest} pullRequest
+ * @param {ReactionConfig} reactionConfig
+ * @returns {Promise<PrMessage>}
+ */
+async function buildPrMessage(channelId, message, pullRequest, reactionConfig) {
+  /** @type {Array<string>} */
+  const existingReactions = (message.reactions ?? [])
+    .map(reaction => reaction.name)
+    .filter(it => it);
+  const reviewReactions = await (0,github/* getReviewReactions */.zp)(pullRequest, reactionConfig);
+  const allReactions = distinct([...existingReactions, ...reviewReactions]);
+  const permalink = await (0,slack/* getPermalink */.t5)(channelId, message.ts);
+
+  return {
+    permalink,
+    reactions: allReactions,
+  };
+}
+
 
 /***/ }),
 
