@@ -1,0 +1,30 @@
+{
+    "reactions": {
+        "approved": [
+            "approved"
+        ],
+        "merged": [
+            "merged"
+        ],
+        "closed": [
+            "pr-closed",
+            "closed"
+        ],
+        "changesRequested": [
+            "changes-requested"
+        ]
+    },
+    "channels": {
+        "project-foo-prs": {
+            "channelId": "C123456",
+            "limit": 100
+        },
+        "project-bar-prs": {
+            "channelId": "C654321"
+        },
+        "project-baz-prs": {
+            "channelId": "C987654",
+            "limit": 50
+        }
+    }
+}
