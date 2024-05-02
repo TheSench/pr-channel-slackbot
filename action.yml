@@ -1,0 +1,12 @@
+name: 'PR Channel Slackbot'
+description: 'A GitHub Action to check slack channels for PRs that are still open'
+inputs:
+  slack-token:
+    description: 'Slack API token'
+    required: true
+  github-token:
+    description: 'GitHub API token'
+    required: true
+  config-file:
+    description: 'Path to JSON Config file'
+    required: true
