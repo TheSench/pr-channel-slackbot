@@ -47,7 +47,7 @@ export function getConfig() {
       channelId: it.channelId,
       limit: it.limit ?? 50
     }))
-    .filter(it => it.channelId);
+    .filter(it => it.channelId && !it.disabled);
 
   return {
     reactionConfig,
