@@ -24,6 +24,7 @@ export async function getMessages(channelId, limit) {
     channel: channelId,
     limit
   });
+  console.info(`Processing ${history.messages?.length ?? 0} messages`);
   return (history.messages ?? [])
     .sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
 }
@@ -61,7 +62,6 @@ async function postThreadHeader(channelId, prCount) {
     : 'The following PRs are still open :thread:');
   return slackClient().chat.postMessage({
     channel: channelId,
-    thread_ts: message.ts,
     text: header,
     blocks: [
       {
