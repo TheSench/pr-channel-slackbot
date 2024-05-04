@@ -8,8 +8,8 @@ export async function run() {
     const { reactionConfig, channelConfig } = getConfig();
     for (let { channelId, limit } of channelConfig) {
       const messagesForChannel = [];
-      for (let message of getMessages(channelId, limit)) {
-        const pullRequests = extractPullRequests(message);
+      for (let message of await getMessages(channelId, limit)) {
+        const pullRequests = extractPullRequests(message.text);
 
         if (!shouldProcess(message, pullRequests, reactionConfig)) {
           continue;
@@ -29,6 +29,7 @@ export async function run() {
       await postOpenPrs(channelId, messagesForChannel);
     }
   } catch (error) {
+    console.error(error);
     setFailed(error.message);
   }
 }

@@ -42374,8 +42374,8 @@ async function run() {
     const { reactionConfig, channelConfig } = (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .getConfig */ .iE)();
     for (let { channelId, limit } of channelConfig) {
       const messagesForChannel = [];
-      for (let message of (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .getMessages */ ._U)(channelId, limit)) {
-        const pullRequests = (0,_github_mjs__WEBPACK_IMPORTED_MODULE_3__/* .extractPullRequests */ .Nd)(message);
+      for (let message of await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .getMessages */ ._U)(channelId, limit)) {
+        const pullRequests = (0,_github_mjs__WEBPACK_IMPORTED_MODULE_3__/* .extractPullRequests */ .Nd)(message.text);
 
         if (!(0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .shouldProcess */ .VM)(message, pullRequests, reactionConfig)) {
           continue;
@@ -42395,6 +42395,7 @@ async function run() {
       await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .JZ)(channelId, messagesForChannel);
     }
   } catch (error) {
+    console.error(error);
     (0,_actions_core__WEBPACK_IMPORTED_MODULE_0__.setFailed)(error.message);
   }
 }
@@ -42443,6 +42444,7 @@ async function getMessages(channelId, limit) {
     channel: channelId,
     limit
   });
+  console.info(`Processing ${history.messages?.length ?? 0} messages`);
   return (history.messages ?? [])
     .sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
 }
@@ -42480,7 +42482,6 @@ async function postThreadHeader(channelId, prCount) {
     : 'The following PRs are still open :thread:');
   return slackClient().chat.postMessage({
     channel: channelId,
-    thread_ts: message.ts,
     text: header,
     blocks: [
       {
@@ -42567,9 +42568,7 @@ function distinct(array) {
 function getConfig() {
   const configFile = (0,core.getInput)('config-file', { required: true });
 
-  const jsonData = (configFile && external_fs_.existsSync(configFile))
-    ? JSON.parse(external_fs_.readFileSync(configFile, 'utf-8'))
-    : {};
+  const jsonData = JSON.parse(external_fs_.readFileSync(configFile, 'utf-8'));
 
   const rawReactionConfig = jsonData.reactions ?? {};
   /** @type {ReactionConfig} */
@@ -42582,7 +42581,7 @@ function getConfig() {
 
   const rawChannelConfig = jsonData.channels ?? {};
   /** @type {Array<ChannelConfig>} */
-  const channelConfig = Object.keys(rawChannelConfig)
+  const channelConfig = Object.values(rawChannelConfig)
     .map(it => ({
       channelId: it.channelId,
       limit: it.limit ?? 50

@@ -29,9 +29,7 @@ import { distinct } from './utils.mjs';
 export function getConfig() {
   const configFile = getInput('config-file', { required: true });
 
-  const jsonData = (configFile && fs.existsSync(configFile))
-    ? JSON.parse(fs.readFileSync(configFile, 'utf-8'))
-    : {};
+  const jsonData = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
 
   const rawReactionConfig = jsonData.reactions ?? {};
   /** @type {ReactionConfig} */
@@ -44,7 +42,7 @@ export function getConfig() {
 
   const rawChannelConfig = jsonData.channels ?? {};
   /** @type {Array<ChannelConfig>} */
-  const channelConfig = Object.keys(rawChannelConfig)
+  const channelConfig = Object.values(rawChannelConfig)
     .map(it => ({
       channelId: it.channelId,
       limit: it.limit ?? 50
