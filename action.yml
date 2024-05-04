@@ -1,5 +1,9 @@
 name: 'PR Channel Slackbot'
 description: 'A GitHub Action to check slack channels for PRs that are still open'
+branding:
+  icon: 'git-pull-request'
+  color: 'white'
+
 inputs:
   slack-token:
     description: 'Slack API token'
