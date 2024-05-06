@@ -42331,9 +42331,8 @@ async function getReviewReactions(pullRequest, reactionConfig) {
   }
 
   return await octokitClient().rest.pulls.listReviews(pullRequest)
-    .then(reviews => reviews.data.map(({ data }) => data.map(review => review.state)))
+    .then(reviews => reviews.data.map(review => review.state))
     .then(states => {
-
       const reviewReactions = [];
       if (states.includes('CHANGES_REQUESTED')) {
         reviewReactions.push(reactionConfig.changesRequested[0]);
