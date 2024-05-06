@@ -42331,9 +42331,8 @@ async function getReviewReactions(pullRequest, reactionConfig) {
   }
 
   return await octokitClient().rest.pulls.listReviews(pullRequest)
-    .then(reviews => reviews.data.map(({ data }) => data.map(review => review.state)))
+    .then(reviews => reviews.data.map(review => review.state))
     .then(states => {
-
       const reviewReactions = [];
       if (states.includes('CHANGES_REQUESTED')) {
         reviewReactions.push(reactionConfig.changesRequested[0]);
@@ -42347,7 +42346,10 @@ async function getReviewReactions(pullRequest, reactionConfig) {
       _reviewReactionCache.set(cacheKey, reviewReactions);
       return reviewReactions;
     })
-    .catch(_ => []);
+    .catch(error => {
+      console.error(`Failed to get review reactions for ${cacheKey}: ${error}`);
+      return [];
+    });
 }
 
 
@@ -42629,6 +42631,11 @@ function shouldProcess(message, pullRequests, reactionConfig) {
   if (isResolved(message, reactionConfig)) {
     console.debug(`SKIPPING: ${message.ts} is already resolved`);
     return false;
+  }
+
+  console.debug(`PROCESSING: ${message.ts}`);
+  if (pullRequests.length > 1) {
+    console.warn(`WARNING: ${message.ts} has multiple pull requests`);
   }
 
   return true;
