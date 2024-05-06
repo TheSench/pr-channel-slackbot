@@ -42583,7 +42583,7 @@ function getConfig() {
   /** @type {Array<ChannelConfig>} */
   const channelConfig = Object.values(rawChannelConfig)
     .map(it => ({
-      channelId: it.channelId,
+      ...it,
       limit: it.limit ?? 50
     }))
     .filter(it => it.channelId && !it.disabled);
