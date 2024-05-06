@@ -96,5 +96,8 @@ export async function getReviewReactions(pullRequest, reactionConfig) {
       _reviewReactionCache.set(cacheKey, reviewReactions);
       return reviewReactions;
     })
-    .catch(_ => []);
+    .catch(error => {
+      console.error(`Failed to get review reactions for ${cacheKey}: ${error}`);
+      return [];
+    });
 }
