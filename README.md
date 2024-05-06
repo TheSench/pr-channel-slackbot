@@ -42,6 +42,9 @@ The PR Channel Slackbot action does the following steps for each configured Slac
 5. **Copy Reactions**:
    - Any reactions present on the original message are copied over to the response within the thread, ensuring continuity and visibility of feedback.
 
+### Example Output
+![alt text](images/example.png)
+
 ### Handling Messages with Multiple Pull Requests
 
 When a message contains multiple pull request links, the aggregate status of these pull requests is considered to determine whether the message should be marked as `merged`, `closed`, or `approved`. In these cases, the "least common denominator" of the statuses is used:
