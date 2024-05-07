@@ -9,8 +9,8 @@ This action is intended for use with a pull request review workflow that incorpo
 1. **Create a Dedicated Slack Channel**: Establish a separate Slack channel specifically for pull requests, such as `#pr-reviews` or `#pull-requests`. This dedicated space ensures focused discussions and avoids cluttering general development conversations.
 
 2. **Post pull request Links**: Developers post links to their pull requests needing review in the dedicated pull request channel. This step actively signals that the pull requests are ready for review and invites team members to provide feedback.
-    > [!Note]
-    > It is recommended that each pull request is posted in its own message.  Messages containing multiple pull requests are supported, but there is no way to indiciate the status of them individually via reactions.
+  > [!Note]
+  > It is recommended that each pull request is posted in its own message.  Messages containing multiple pull requests are supported, but there is no way to indiciate the status of them individually via reactions.
 
 3. **Use Reactions for Review Statuses**: These reactions indicate that a pull request has been reviewed already, so reviewers may want to focus on other pull requests first.
    - **Approval**: Team members can add an "approved" reaction (e.g., ✅) to the corresponding message if they've approved it.
@@ -180,11 +180,11 @@ The `channels` section contains a map of human-readable channel names to channel
 
 Each channel configuration can have the following fields:
 1. `channelId` - (required) the ID of the channel.
-    > [!NOTE]
-    > If you do not know the ID of a channel, you can easily retrieve it from a link to that channel.  Simply right-click on the channel and select `Copy` > `Copy link`.  The last part of the link will be the channel ID.  For example, if your channel's link is `https://mycompany.slack.com/archives/C123456`, then the channel ID is `C123456`.
+  > [!NOTE]
+  > If you do not know the ID of a channel, you can easily retrieve it from a link to that channel.  Simply right-click on the channel and select `Copy` > `Copy link`.  The last part of the link will be the channel ID.  For example, if your channel's link is `https://mycompany.slack.com/archives/C123456`, then the channel ID is `C123456`.
 2. `limit` - (optional - default `50`) this limits how many messages in the channel will be reviewed for pull requests.  Only the last `<limit>` messages will be checked.
-    > [!NOTE]
-    > It is recommended that you use a channel that is dedicated for pull requests to separate requests for reviews from other development-related conversations.  If your team is consistently reviewing pull requests, a large limit should not be required.
+  > [!NOTE]
+  > It is recommended that you use a channel that is dedicated for pull requests to separate requests for reviews from other development-related conversations.  If your team is consistently reviewing pull requests, a large limit should not be required.
 3. `disabled` - (optional - default `false`) if you wish to disable a channel without completely removing it, you can mark it as disabled.
 
 ## License
