@@ -9,8 +9,8 @@ This action is intended for use with a pull request review workflow that incorpo
 1. **Create a Dedicated Slack Channel**: Establish a separate Slack channel specifically for pull requests, such as `#pr-reviews` or `#pull-requests`. This dedicated space ensures focused discussions and avoids cluttering general development conversations.
 
 2. **Post pull request Links**: Developers post links to their pull requests needing review in the dedicated pull request channel. This step actively signals that the pull requests are ready for review and invites team members to provide feedback.
-    > [!Note]
-    > It is recommended that each pull request is posted in its own message.  Messages containing multiple pull requests are supported, but there is no way to indiciate the status of them individually via reactions.
+  > [!Note]
+  > It is recommended that each pull request is posted in its own message.  Messages containing multiple pull requests are supported, but there is no way to indiciate the status of them individually via reactions.
 
 3. **Use Reactions for Review Statuses**: These reactions indicate that a pull request has been reviewed already, so reviewers may want to focus on other pull requests first.
    - **Approval**: Team members can add an "approved" reaction (e.g., ✅) to the corresponding message if they've approved it.
