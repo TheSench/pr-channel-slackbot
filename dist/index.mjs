@@ -42374,7 +42374,7 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 async function run() {
   try {
     const { reactionConfig, channelConfig } = (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .getConfig */ .iE)();
-    for (let { channelId, limit } of channelConfig) {
+    for (let { channelId, limit, disableReactionCopying } of channelConfig) {
       const messagesForChannel = [];
       for (let message of await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .getMessages */ ._U)(channelId, limit)) {
         const pullRequests = (0,_github_mjs__WEBPACK_IMPORTED_MODULE_3__/* .extractPullRequests */ .Nd)(message.text);
@@ -42391,7 +42391,7 @@ async function run() {
         }
 
         messagesForChannel.push(
-          await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .buildPrMessage */ .wB)(channelId, message, pullRequests[0], reactionConfig, channelConfig)
+          await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .buildPrMessage */ .wB)(channelId, message, pullRequests[0], reactionConfig, disableReactionCopying)
         );
       }
       await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .JZ)(channelId, messagesForChannel);
@@ -42661,9 +42661,9 @@ function isResolved(message, reactionConfig) {
  * @param {ChannelConfig} channelConfig
  * @returns {Promise<PrMessage>}
  */
-async function buildPrMessage(channelId, message, pullRequest, reactionConfig, channelConfig) {
+async function buildPrMessage(channelId, message, pullRequest, reactionConfig, disableReactionCopying) {
   /** @type {Array<string>} */
-  const existingReactions = channelConfig.disableReactionCopying
+  const existingReactions = disableReactionCopying
     ? []
     : (message.reactions ?? [])
       .map(reaction => reaction.name)

@@ -6,7 +6,7 @@ import { extractPullRequests } from "./github.mjs"
 export async function run() {
   try {
     const { reactionConfig, channelConfig } = getConfig();
-    for (let { channelId, limit } of channelConfig) {
+    for (let { channelId, limit, disableReactionCopying } of channelConfig) {
       const messagesForChannel = [];
       for (let message of await getMessages(channelId, limit)) {
         const pullRequests = extractPullRequests(message.text);
@@ -23,7 +23,7 @@ export async function run() {
         }
 
         messagesForChannel.push(
-          await buildPrMessage(channelId, message, pullRequests[0], reactionConfig, channelConfig)
+          await buildPrMessage(channelId, message, pullRequests[0], reactionConfig, disableReactionCopying)
         );
       }
       await postOpenPrs(channelId, messagesForChannel);

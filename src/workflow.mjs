@@ -120,9 +120,9 @@ function isResolved(message, reactionConfig) {
  * @param {ChannelConfig} channelConfig
  * @returns {Promise<PrMessage>}
  */
-export async function buildPrMessage(channelId, message, pullRequest, reactionConfig, channelConfig) {
+export async function buildPrMessage(channelId, message, pullRequest, reactionConfig, disableReactionCopying) {
   /** @type {Array<string>} */
-  const existingReactions = channelConfig.disableReactionCopying
+  const existingReactions = disableReactionCopying
     ? []
     : (message.reactions ?? [])
       .map(reaction => reaction.name)
