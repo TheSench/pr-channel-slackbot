@@ -12,7 +12,8 @@
         ],
         "changesRequested": [
             "changes-requested"
-        ]
+        ],
+        "copyExisting": false
     },
     "channels": {
         "project-foo-prs": {
