@@ -127,6 +127,7 @@ export async function buildPrMessage(channelId, message, pullRequest, reactionCo
     : (message.reactions ?? [])
       .map(reaction => reaction.name)
       .filter(it => it);
+  console.log(channelConfig, existingReactions);
   const reviewReactions = await getReviewReactions(pullRequest, reactionConfig);
   const allReactions = distinct([...existingReactions, ...reviewReactions]);
   const permalink = await getPermalink(channelId, message.ts);
