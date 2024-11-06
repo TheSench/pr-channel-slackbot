@@ -42391,7 +42391,7 @@ async function run() {
         }
 
         messagesForChannel.push(
-          await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .buildPrMessage */ .wB)(channelId, message, pullRequests[0], reactionConfig)
+          await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .buildPrMessage */ .wB)(channelId, message, pullRequests[0], reactionConfig, channelConfig)
         );
       }
       await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .JZ)(channelId, messagesForChannel);
@@ -42560,6 +42560,7 @@ function distinct(array) {
  * @typedef {Object} ChannelConfig
  * @property {string} channelId
  * @property {number} limit
+ * @property {boolean} disableReactionCopying
  */
 /**
  * @typedef {Object} PrMessage
@@ -42586,7 +42587,8 @@ function getConfig() {
   const channelConfig = Object.values(rawChannelConfig)
     .map(it => ({
       ...it,
-      limit: it.limit ?? 50
+      limit: it.limit ?? 50,
+      disableReactionCopying: it.disableReactionCopying ?? false
     }))
     .filter(it => it.channelId && !it.disabled);
 
@@ -42656,13 +42658,16 @@ function isResolved(message, reactionConfig) {
  * @param {SlackMessage} message
  * @param {PullRequest} pullRequest
  * @param {ReactionConfig} reactionConfig
+ * @param {ChannelConfig} channelConfig
  * @returns {Promise<PrMessage>}
  */
-async function buildPrMessage(channelId, message, pullRequest, reactionConfig) {
+async function buildPrMessage(channelId, message, pullRequest, reactionConfig, channelConfig) {
   /** @type {Array<string>} */
-  const existingReactions = (message.reactions ?? [])
-    .map(reaction => reaction.name)
-    .filter(it => it);
+  const existingReactions = channelConfig.disableReactionCopying
+    ? []
+    : (message.reactions ?? [])
+      .map(reaction => reaction.name)
+      .filter(it => it);
   const reviewReactions = await (0,github/* getReviewReactions */.zp)(pullRequest, reactionConfig);
   const allReactions = distinct([...existingReactions, ...reviewReactions]);
   const permalink = await (0,slack/* getPermalink */.t5)(channelId, message.ts);

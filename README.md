@@ -40,7 +40,7 @@ The PR Channel Slackbot action does the following steps for each configured Slac
    - The action adds a response within the thread for each message containing a link to an open pull request.
 
 5. **Copy Reactions**:
-   - Any reactions present on the original message are copied over to the response within the thread, ensuring continuity and visibility of feedback.
+   - Any reactions present on the original message are copied over to the response within the thread, ensuring continuity and visibility of feedback.  This can be disabled via 
 
 ### Example Output
 ![alt text](images/example.png)
@@ -154,14 +154,15 @@ Example `pr_channel_slackbot_config.json`:
             "limit": 100
         },
         "project-bar-prs": {
-            "channelId": "C654321"
+            "channelId": "C654321",
+            "disableReactionCopying": true
         },
         "project-baz-prs": {
             "channelId": "C987654",
             "limit": 50,
             "disabled": true
         }
-    }
+    },
 }
 ```
 
@@ -179,13 +180,14 @@ The `reactions` section contains configuration for each reaction type used by th
 The `channels` section contains a map of human-readable channel names to channel configurations.  The name of the keys here does not impact processing.  It is recommended that the keys match the name of the assocaited channel for clarity.
 
 Each channel configuration can have the following fields:
-1. `channelId` - (required) the ID of the channel.
+* `channelId` - (required) the ID of the channel.
     > [!NOTE]
     > If you do not know the ID of a channel, you can easily retrieve it from a link to that channel.  Simply right-click on the channel and select `Copy` > `Copy link`.  The last part of the link will be the channel ID.  For example, if your channel's link is `https://mycompany.slack.com/archives/C123456`, then the channel ID is `C123456`.
-2. `limit` - (optional - default `50`) this limits how many messages in the channel will be reviewed for pull requests.  Only the last `<limit>` messages will be checked.
+* `limit` - (optional - default `50`) this limits how many messages in the channel will be reviewed for pull requests.  Only the last `<limit>` messages will be checked.
     > [!NOTE]
     > It is recommended that you use a channel that is dedicated for pull requests to separate requests for reviews from other development-related conversations.  If your team is consistently reviewing pull requests, a large limit should not be required.
-3. `disabled` - (optional - default `false`) if you wish to disable a channel without completely removing it, you can mark it as disabled.
+* `disabled` - (optional - default `false`) if you wish to disable a channel without completely removing it, you can mark it as disabled.
+* `disableReactionCopying` - (optional - default `false`) disable copying of reactions from the original post to the threads when `true`.
 
 ## License
 

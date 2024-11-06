@@ -23,7 +23,7 @@ export async function run() {
         }
 
         messagesForChannel.push(
-          await buildPrMessage(channelId, message, pullRequests[0], reactionConfig)
+          await buildPrMessage(channelId, message, pullRequests[0], reactionConfig, channelConfig)
         );
       }
       await postOpenPrs(channelId, messagesForChannel);

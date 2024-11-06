@@ -19,6 +19,7 @@ import { distinct } from './utils.mjs';
  * @typedef {Object} ChannelConfig
  * @property {string} channelId
  * @property {number} limit
+ * @property {boolean} disableReactionCopying
  */
 /**
  * @typedef {Object} PrMessage
@@ -45,7 +46,8 @@ export function getConfig() {
   const channelConfig = Object.values(rawChannelConfig)
     .map(it => ({
       ...it,
-      limit: it.limit ?? 50
+      limit: it.limit ?? 50,
+      disableReactionCopying: it.disableReactionCopying ?? false
     }))
     .filter(it => it.channelId && !it.disabled);
 
@@ -115,13 +117,16 @@ function isResolved(message, reactionConfig) {
  * @param {SlackMessage} message
  * @param {PullRequest} pullRequest
  * @param {ReactionConfig} reactionConfig
+ * @param {ChannelConfig} channelConfig
  * @returns {Promise<PrMessage>}
  */
-export async function buildPrMessage(channelId, message, pullRequest, reactionConfig) {
+export async function buildPrMessage(channelId, message, pullRequest, reactionConfig, channelConfig) {
   /** @type {Array<string>} */
-  const existingReactions = (message.reactions ?? [])
-    .map(reaction => reaction.name)
-    .filter(it => it);
+  const existingReactions = channelConfig.disableReactionCopying
+    ? []
+    : (message.reactions ?? [])
+      .map(reaction => reaction.name)
+      .filter(it => it);
   const reviewReactions = await getReviewReactions(pullRequest, reactionConfig);
   const allReactions = distinct([...existingReactions, ...reviewReactions]);
   const permalink = await getPermalink(channelId, message.ts);
