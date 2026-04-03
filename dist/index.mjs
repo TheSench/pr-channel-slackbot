@@ -42374,6 +42374,7 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 async function run() {
   try {
     const { reactionConfig, channelConfig } = (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .getConfig */ .iE)();
+    const skipDigest = (0,_actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput)('skip-digest');
     for (let { channelId, limit, disableReactionCopying } of channelConfig) {
       const messagesForChannel = [];
       for (let message of await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .getMessages */ ._U)(channelId, limit)) {
@@ -42390,11 +42391,15 @@ async function run() {
           continue;
         }
 
-        messagesForChannel.push(
-          await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .buildPrMessage */ .wB)(channelId, message, pullRequests[0], reactionConfig, disableReactionCopying)
-        );
+        if (!skipDigest) {
+          messagesForChannel.push(
+            await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .buildPrMessage */ .wB)(channelId, message, pullRequests[0], reactionConfig, disableReactionCopying)
+          );
+        }
       }
-      await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .JZ)(channelId, messagesForChannel);
+      if (!skipDigest) {
+        await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .JZ)(channelId, messagesForChannel);
+      }
     }
   } catch (error) {
     console.error(error);
