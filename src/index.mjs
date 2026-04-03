@@ -23,9 +23,11 @@ export async function run() {
           continue;
         }
 
-        messagesForChannel.push(
-          await buildPrMessage(channelId, message, pullRequests[0], reactionConfig, disableReactionCopying)
-        );
+        if (!skipDigest) {
+          messagesForChannel.push(
+            await buildPrMessage(channelId, message, pullRequests[0], reactionConfig, disableReactionCopying)
+          );
+        }
       }
       if (!skipDigest) {
         await postOpenPrs(channelId, messagesForChannel);
