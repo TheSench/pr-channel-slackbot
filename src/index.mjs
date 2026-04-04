@@ -1,4 +1,4 @@
-import { setFailed } from "@actions/core";
+import { getBooleanInput, setFailed } from "@actions/core";
 import { getConfig, shouldProcess, getAggregateStatus, buildPrMessage } from "./workflow.mjs";
 import { getMessages, addReaction, postOpenPrs } from "./slack.mjs";
 import { extractPullRequests } from "./github.mjs"
@@ -6,7 +6,8 @@ import { extractPullRequests } from "./github.mjs"
 export async function run() {
   try {
     const { reactionConfig, channelConfig } = getConfig();
-    for (let { channelId, limit } of channelConfig) {
+    const skipDigest = getBooleanInput('skip-digest');
+    for (let { channelId, limit, disableReactionCopying } of channelConfig) {
       const messagesForChannel = [];
       for (let message of await getMessages(channelId, limit)) {
         const pullRequests = extractPullRequests(message.text);
@@ -22,11 +23,15 @@ export async function run() {
           continue;
         }
 
-        messagesForChannel.push(
-          await buildPrMessage(channelId, message, pullRequests[0], reactionConfig)
-        );
+        if (!skipDigest) {
+          messagesForChannel.push(
+            await buildPrMessage(channelId, message, pullRequests[0], reactionConfig, disableReactionCopying)
+          );
+        }
       }
-      await postOpenPrs(channelId, messagesForChannel);
+      if (!skipDigest) {
+        await postOpenPrs(channelId, messagesForChannel);
+      }
     }
   } catch (error) {
     console.error(error);
