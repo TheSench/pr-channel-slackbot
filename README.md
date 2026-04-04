@@ -137,7 +137,7 @@ jobs:
 
 ### When to use `skip-digest`
 
-Use `skip-digest: true` when you want the bot to clean up stale reactions (marking merged/closed PRs) without flooding the channel with a new digest thread every time it runs.
+Use `skip-digest: true` when you want the bot to mark merged/closed PRs with reactions without posting a new digest thread to the channel every time it runs.
 
 A common pattern is to run the full digest on a regular schedule (e.g., twice a day) and a cleanup-only run more frequently or on-demand:
 
