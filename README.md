@@ -34,7 +34,7 @@ The PR Channel Slackbot action does the following steps for each configured Slac
      - If the pull request is still open, the retrieve the review status from GitHub. If changes are requested, the `changesRequested` reaction is added to the message. Otherwise, if there are approvals, the `approved` reaction is added.
 
 3. **Create New Thread**:
-   - After processing all relevant messages, the action creates a new thread in the pull request channel.
+   - After processing all relevant messages, the action creates a new thread in the pull request channel. This step (and the next two) can be skipped by setting `skip-digest: true`.
 
 4. **Add Responses**:
    - The action adds a response within the thread for each message containing a link to an open pull request.
@@ -123,7 +123,17 @@ jobs:
           slack-token: ${{ secrets.SLACK_TOKEN }}
           github-token: ${{ secrets.PR_BOT_GITHUB_TOKEN }}
           config-file: '.github/pr_channel_slackbot_config.json'
+          # skip-digest: true  # Uncomment to skip posting the open PR digest thread
 ```
+
+## Action Inputs
+
+| Input | Required | Default | Description |
+|---|---|---|---|
+| `slack-token` | yes | | Slack API bot token |
+| `github-token` | yes | | GitHub API token |
+| `config-file` | yes | | Path to the JSON configuration file |
+| `skip-digest` | no | `false` | When `true`, skips posting the open PR digest thread to Slack. Closed/merged PR reactions still fire normally. |
 
 ## Configuration File
 
