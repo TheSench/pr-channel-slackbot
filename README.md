@@ -135,6 +135,44 @@ jobs:
 | `config-file` | yes | | Path to the JSON configuration file |
 | `skip-digest` | no | `false` | When `true`, skips posting the open PR digest thread to Slack. Closed/merged PR reactions still fire normally. |
 
+### When to use `skip-digest`
+
+Use `skip-digest: true` when you want the bot to clean up stale reactions (marking merged/closed PRs) without flooding the channel with a new digest thread every time it runs.
+
+A common pattern is to run the full digest on a regular schedule (e.g., twice a day) and a cleanup-only run more frequently or on-demand:
+
+```yaml
+name: PR Channel Slackbot
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip-digest:
+        description: 'Skip posting the open PR digest'
+        type: boolean
+        default: false
+  schedule:
+    # Full digest at 12:00 and 17:00 (UTC) every weekday
+    - cron: '0 12,17 * * 1-5'
+    # Cleanup-only every hour during business hours
+    - cron: '0 9-17 * * 1-5'
+
+jobs:
+  pr-channel-slackbot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: PR Channel Slackbot
+        uses: TheSench/pr-channel-slackbot@v1
+        with:
+          slack-token: ${{ secrets.SLACK_TOKEN }}
+          github-token: ${{ secrets.PR_BOT_GITHUB_TOKEN }}
+          config-file: '.github/pr_channel_slackbot_config.json'
+          skip-digest: ${{ github.event_name == 'schedule' && github.event.schedule == '0 9-17 * * 1-5' || inputs.skip-digest }}
+```
+
 ## Configuration File
 
 The configuration file (e.g., `.github/pr_channel_slackbot_config.json`) contains two groups of configurations, one for emojis interpreted by or used by the bot, and one for configuring which channels should be monitored.
