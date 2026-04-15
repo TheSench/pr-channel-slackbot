@@ -53,6 +53,7 @@ const BASE_CHANNEL = {
   limit: 50,
   maxPages: 1,
   disableReactionCopying: false,
+  allowBotMessages: false,
 };
 
 describe('run()', () => {
@@ -192,5 +193,19 @@ describe('run()', () => {
 
       expect(setFailed).toHaveBeenCalledWith('Config not found');
     });
+  });
+
+  it('passes allowBotMessages from channel config to shouldProcess', async () => {
+    const PR_MESSAGE = { ts: '1.0', text: 'PR link' };
+    getConfig.mockReturnValue({
+      reactionConfig: { merged: ['merged'], closed: ['closed'] },
+      channelConfig: [{ ...BASE_CHANNEL, trackUnresolved: false, allowBotMessages: true }],
+    });
+    collectMessages.mockResolvedValue([PR_MESSAGE]);
+    extractPullRequests.mockReturnValue([{}]);
+
+    await run();
+
+    expect(shouldProcess).toHaveBeenCalledWith(PR_MESSAGE, [{}], expect.any(Object), true);
   });
 });
