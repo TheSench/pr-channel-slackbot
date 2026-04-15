@@ -1,7 +1,7 @@
 import { getInput } from '@actions/core';
 import fs from 'fs';
 import { getPullRequestStatus, getReviewReactions } from './github.mjs';
-import { getPermalink } from './slack.mjs';
+import { getPermalink, getMessagePage, getMessageByTimestamp } from './slack.mjs';
 import { distinct } from './utils.mjs';
 
 /** @typedef {import('./slack.mjs').SlackMessage} SlackMessage */
@@ -19,6 +19,8 @@ import { distinct } from './utils.mjs';
  * @typedef {Object} ChannelConfig
  * @property {string} channelId
  * @property {number} limit
+ * @property {number} maxPages
+ * @property {boolean} trackUnresolved
  * @property {boolean} disableReactionCopying
  */
 /**
@@ -47,6 +49,8 @@ export function getConfig() {
     .map(it => ({
       ...it,
       limit: it.limit ?? 50,
+      maxPages: it.maxPages ?? 1,
+      trackUnresolved: it.trackUnresolved ?? false,
       disableReactionCopying: it.disableReactionCopying ?? false
     }))
     .filter(it => it.channelId && !it.disabled);
@@ -55,6 +59,66 @@ export function getConfig() {
     reactionConfig,
     channelConfig
   };
+}
+
+/**
+ * Build the unified message set for a channel from two sources:
+ * 1. Paginated Slack history back to the last digest thread (or maxPages pages).
+ * 2. Individually-fetched messages for previously-tracked unresolved timestamps
+ *    not already present in the paginated results (only when trackUnresolved is true).
+ *
+ * @param {string} channelId
+ * @param {import('./state.mjs').ChannelState} channelState
+ * @param {number} limit Messages per page
+ * @param {number} maxPages Maximum pages to fetch
+ * @param {boolean} trackUnresolved Whether to fetch individually-tracked messages
+ * @returns {Promise<SlackMessage[]>} Deduplicated messages sorted ascending by ts
+ */
+export async function collectMessages(channelId, channelState, limit, maxPages, trackUnresolved) {
+  const { lastDigestThreadTimestamp, unresolvedMessageTimestamps } = channelState;
+
+  // Source 1: paginated history
+  const allFetchedMessages = [];
+  let cursor = undefined;
+
+  for (let page = 0; page < maxPages; page++) {
+    const { messages, nextCursor } = await getMessagePage(channelId, limit, cursor);
+    allFetchedMessages.push(...messages);
+
+    if (lastDigestThreadTimestamp && messages.some(m => m.ts === lastDigestThreadTimestamp)) {
+      break;
+    }
+
+    if (!nextCursor) break;
+    cursor = nextCursor;
+  }
+
+  console.info(`Fetched ${allFetchedMessages.length} messages across pages`);
+
+  const allFetchedTs = new Set(allFetchedMessages.map(m => m.ts));
+  const postDigestMessages = lastDigestThreadTimestamp
+    ? allFetchedMessages.filter(m => parseFloat(m.ts) > parseFloat(lastDigestThreadTimestamp))
+    : [...allFetchedMessages];
+
+  // Source 2: previously-tracked unresolved messages not seen in Source 1
+  const source2Messages = [];
+  if (trackUnresolved) {
+    for (const ts of unresolvedMessageTimestamps) {
+      if (allFetchedTs.has(ts)) continue;
+      const message = await getMessageByTimestamp(channelId, ts);
+      if (message) {
+        source2Messages.push(message);
+      }
+    }
+  }
+
+  // Merge Source 1 post-digest + Source 2, deduplicate by ts, sort ascending
+  const merged = [...postDigestMessages, ...source2Messages];
+  const deduplicated = [...new Map(merged.map(m => [m.ts, m])).values()];
+  deduplicated.sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
+
+  console.info(`Processing ${deduplicated.length} messages`);
+  return deduplicated;
 }
 
 export async function getAggregateStatus(pullRequests) {
