@@ -1,11 +1,22 @@
 import fs from 'fs';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 
 /**
  * @typedef {Object} ChannelState
  * @property {Array<string>} unresolvedMessageTimestamps
  * @property {string|null} lastDigestThreadTimestamp
  */
+
+/**
+ * Run a git command, throwing if it exits non-zero.
+ * @param {string[]} args
+ */
+function git(...args) {
+  const result = spawnSync('git', args, { stdio: 'inherit' });
+  if (result.status !== 0) {
+    throw new Error(`git ${args.join(' ')} exited with status ${result.status}`);
+  }
+}
 
 /**
  * Load state from the state file.
@@ -43,14 +54,12 @@ export function getChannelState(state, channelId) {
  */
 export function saveState(stateFile, state) {
   fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
-  execSync(`git add "${stateFile}"`);
-  try {
-    execSync(`git diff --cached --exit-code -- "${stateFile}"`, { stdio: 'ignore' });
+  git('add', stateFile);
+  const diff = spawnSync('git', ['diff', '--cached', '--exit-code', '--', stateFile], { stdio: 'ignore' });
+  if (diff.status === 0) {
     console.info('No changes to state file, skipping commit.');
     return;
-  } catch {
-    // Staged changes exist — proceed with commit
   }
-  execSync(`git commit -m "chore: update PR channel state [skip ci]"`);
-  execSync(`git push`);
+  git('commit', '-m', 'chore: update PR channel state [skip ci]');
+  git('push', 'origin', `HEAD:refs/heads/${process.env.GITHUB_REF_NAME}`);
 }
