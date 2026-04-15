@@ -42764,16 +42764,22 @@ async function collectMessages(channelId, channelState, limit, maxPages, trackUn
   const allFetchedMessages = [];
   let cursor = undefined;
 
+  let digestFound = false;
   for (let page = 0; page < maxPages; page++) {
     const { messages, nextCursor } = await (0,slack/* getMessagePage */.OT)(channelId, limit, cursor);
     allFetchedMessages.push(...messages);
 
     if (lastDigestThreadTimestamp && messages.some(m => m.ts === lastDigestThreadTimestamp)) {
+      digestFound = true;
       break;
     }
 
     if (!nextCursor) break;
     cursor = nextCursor;
+  }
+
+  if (lastDigestThreadTimestamp && !digestFound) {
+    console.warn(`Reached maxPages (${maxPages}) without finding last digest anchor for channel ${channelId}. Some messages may be missed. Consider increasing maxPages.`);
   }
 
   console.info(`Fetched ${allFetchedMessages.length} messages across pages`);
