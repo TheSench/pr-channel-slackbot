@@ -175,8 +175,9 @@ export async function getAggregateStatus(pullRequests) {
  * @param {SlackMessage} message
  * @param {Array<PullRequest>} pullRequests
  * @param {ReactionConfig} reactionConfig
+ * @param {boolean} allowBotMessages
  */
-export function shouldProcess(message, pullRequests, reactionConfig) {
+export function shouldProcess(message, pullRequests, reactionConfig, allowBotMessages = false) {
   if (pullRequests.length === 0) {
     console.debug(`SKIPPING: ${message.ts} has no pull requests`);
     return false;
@@ -184,7 +185,7 @@ export function shouldProcess(message, pullRequests, reactionConfig) {
     console.warn(`WARNING: ${message.ts} has multiple pull requests`);
   }
 
-  if (message.bot_id) {
+  if (!allowBotMessages && message.bot_id) {
     console.debug(`SKIPPING: ${message.ts} is a bot message`);
     return false;
   }

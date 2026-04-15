@@ -293,6 +293,11 @@ describe('shouldProcess', () => {
     const message = { ts: '1.0', text: 'PR link', reactions: [{ name: 'eyes' }] };
     expect(shouldProcess(message, [{}], reactionConfig)).toBe(true);
   });
+
+  it('returns true for a bot message when allowBotMessages is true', () => {
+    const message = { ts: '1.0', text: 'PR link', bot_id: 'B123' };
+    expect(shouldProcess(message, [{}], reactionConfig, true)).toBe(true);
+  });
 });
 
 describe('getAggregateStatus', () => {
