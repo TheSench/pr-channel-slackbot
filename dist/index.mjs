@@ -42381,7 +42381,7 @@ async function run() {
 
     const state = (0,_state_mjs__WEBPACK_IMPORTED_MODULE_4__/* .loadState */ .jw)(stateFile);
 
-    for (let { channelId, limit, maxPages, trackUnresolved, disableReactionCopying } of channelConfig) {
+    for (let { channelId, limit, maxPages, trackUnresolved, disableReactionCopying, allowBotMessages } of channelConfig) {
       const channelState = (0,_state_mjs__WEBPACK_IMPORTED_MODULE_4__/* .getChannelState */ .iJ)(state, channelId);
       const messages = await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .collectMessages */ .$I)(channelId, channelState, limit, maxPages, trackUnresolved);
 
@@ -42391,7 +42391,7 @@ async function run() {
       for (let message of messages) {
         const pullRequests = (0,_github_mjs__WEBPACK_IMPORTED_MODULE_3__/* .extractPullRequests */ .Nd)(message.text);
 
-        if (!(0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .shouldProcess */ .VM)(message, pullRequests, reactionConfig)) {
+        if (!(0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .shouldProcess */ .VM)(message, pullRequests, reactionConfig, allowBotMessages)) {
           continue;
         }
 
@@ -42415,10 +42415,12 @@ async function run() {
         ? channelState.lastDigestThreadTimestamp
         : await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .JZ)(channelId, messagesForDigest));
 
-      state[channelId] = {
-        unresolvedMessageTimestamps: unresolvedTimestamps,
-        lastDigestThreadTimestamp: digestThreadTimestamp
-      };
+      if (trackUnresolved) {
+        state[channelId] = {
+          unresolvedMessageTimestamps: unresolvedTimestamps,
+          lastDigestThreadTimestamp: digestThreadTimestamp
+        };
+      }
     }
 
     (0,_state_mjs__WEBPACK_IMPORTED_MODULE_4__/* .saveState */ .zL)(stateFile, state);
@@ -42704,6 +42706,7 @@ function distinct(array) {
  * @property {number} maxPages
  * @property {boolean} trackUnresolved
  * @property {boolean} disableReactionCopying
+ * @property {boolean} allowBotMessages
  */
 /**
  * @typedef {Object} PrMessage
@@ -42733,7 +42736,8 @@ function getConfig() {
       limit: it.limit ?? 50,
       maxPages: it.maxPages ?? 1,
       trackUnresolved: it.trackUnresolved ?? false,
-      disableReactionCopying: it.disableReactionCopying ?? false
+      disableReactionCopying: it.disableReactionCopying ?? false,
+      allowBotMessages: it.allowBotMessages ?? false
     }))
     .filter(it => it.channelId && !it.disabled);
 
@@ -42823,7 +42827,7 @@ async function collectMessages(channelId, channelState, limit, maxPages, trackUn
   const { lastDigestThreadTimestamp, unresolvedMessageTimestamps } = channelState;
 
   const { allMessages, postDigestMessages } = await fetchPagedMessages(
-    channelId, limit, maxPages, lastDigestThreadTimestamp
+    channelId, limit, maxPages, trackUnresolved ? lastDigestThreadTimestamp : null
   );
 
   const trackedMessages = trackUnresolved
@@ -42855,8 +42859,9 @@ async function getAggregateStatus(pullRequests) {
  * @param {SlackMessage} message
  * @param {Array<PullRequest>} pullRequests
  * @param {ReactionConfig} reactionConfig
+ * @param {boolean} allowBotMessages
  */
-function shouldProcess(message, pullRequests, reactionConfig) {
+function shouldProcess(message, pullRequests, reactionConfig, allowBotMessages = false) {
   if (pullRequests.length === 0) {
     console.debug(`SKIPPING: ${message.ts} has no pull requests`);
     return false;
@@ -42864,7 +42869,7 @@ function shouldProcess(message, pullRequests, reactionConfig) {
     console.warn(`WARNING: ${message.ts} has multiple pull requests`);
   }
 
-  if (message.bot_id) {
+  if (!allowBotMessages && message.bot_id) {
     console.debug(`SKIPPING: ${message.ts} is a bot message`);
     return false;
   }
@@ -42875,10 +42880,6 @@ function shouldProcess(message, pullRequests, reactionConfig) {
   }
 
   console.debug(`PROCESSING: ${message.ts}`);
-  if (pullRequests.length > 1) {
-    console.warn(`WARNING: ${message.ts} has multiple pull requests`);
-  }
-
   return true;
 }
 

@@ -196,10 +196,6 @@ export function shouldProcess(message, pullRequests, reactionConfig, allowBotMes
   }
 
   console.debug(`PROCESSING: ${message.ts}`);
-  if (pullRequests.length > 1) {
-    console.warn(`WARNING: ${message.ts} has multiple pull requests`);
-  }
-
   return true;
 }
 
