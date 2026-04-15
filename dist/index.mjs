@@ -42789,25 +42789,25 @@ async function collectMessages(channelId, channelState, limit, maxPages, trackUn
     ? allFetchedMessages.filter(m => parseFloat(m.ts) > parseFloat(lastDigestThreadTimestamp))
     : [...allFetchedMessages];
 
-  // Source 2: previously-tracked unresolved messages not seen in Source 1
-  const source2Messages = [];
+  // Source 2: previously-tracked messages that scrolled past the pagination window
+  const trackedMessages = [];
   if (trackUnresolved) {
     for (const ts of unresolvedMessageTimestamps) {
       if (allFetchedTs.has(ts)) continue;
       const message = await (0,slack/* getMessageByTimestamp */.D2)(channelId, ts);
       if (message) {
-        source2Messages.push(message);
+        trackedMessages.push(message);
       }
     }
   }
 
-  // Merge Source 1 post-digest + Source 2, deduplicate by ts, sort ascending
-  const merged = [...postDigestMessages, ...source2Messages];
-  const deduplicated = [...new Map(merged.map(m => [m.ts, m])).values()];
-  deduplicated.sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
+  // Merge and sort ascending — no deduplication needed since trackedMessages
+  // only contains ts values absent from allFetchedTs (and thus postDigestMessages)
+  const result = [...postDigestMessages, ...trackedMessages]
+    .sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
 
-  console.info(`Processing ${deduplicated.length} messages`);
-  return deduplicated;
+  console.info(`Processing ${result.length} messages`);
+  return result;
 }
 
 async function getAggregateStatus(pullRequests) {
