@@ -42411,10 +42411,9 @@ async function run() {
         }
       }
 
-      let digestThreadTimestamp = channelState.lastDigestThreadTimestamp;
-      if (!skipDigest) {
-        digestThreadTimestamp = await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .JZ)(channelId, messagesForDigest);
-      }
+      const digestThreadTimestamp = (skipDigest
+        ? channelState.lastDigestThreadTimestamp
+        : await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .JZ)(channelId, messagesForDigest));
 
       state[channelId] = {
         unresolvedMessageTimestamps: unresolvedTimestamps,

@@ -42,10 +42,9 @@ export async function run() {
         }
       }
 
-      let digestThreadTimestamp = channelState.lastDigestThreadTimestamp;
-      if (!skipDigest) {
-        digestThreadTimestamp = await postOpenPrs(channelId, messagesForDigest);
-      }
+      const digestThreadTimestamp = (skipDigest
+        ? channelState.lastDigestThreadTimestamp
+        : await postOpenPrs(channelId, messagesForDigest));
 
       state[channelId] = {
         unresolvedMessageTimestamps: unresolvedTimestamps,
