@@ -18,6 +18,10 @@ inputs:
     description: 'Skip posting the open PR digest to Slack'
     required: false
     default: 'false'
+  state-file:
+    description: 'Path to the state file for tracking unresolved PRs and digest threads'
+    required: false
+    default: './pr-channel-state.json'
 
 runs:
   using: node20
