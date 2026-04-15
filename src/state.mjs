@@ -8,13 +8,14 @@ import { spawnSync } from 'child_process';
  */
 
 /**
- * Run a git command, throwing if it exits non-zero.
+ * Run a git command, throwing if it exits non-zero or fails to spawn.
  * @param {string[]} args
  */
 function git(...args) {
   const result = spawnSync('git', args, { stdio: 'inherit' });
-  if (result.status !== 0) {
-    throw new Error(`git ${args.join(' ')} exited with status ${result.status}`);
+  if (result.error || result.status !== 0) {
+    const detail = result.error ? result.error.message : `exit status ${result.status}`;
+    throw new Error(`git ${args.join(' ')} failed: ${detail}`);
   }
 }
 
@@ -56,10 +57,15 @@ export function saveState(stateFile, state) {
   fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
   git('add', stateFile);
   const diff = spawnSync('git', ['diff', '--cached', '--exit-code', '--', stateFile], { stdio: 'ignore' });
+  if (diff.error) throw new Error(`git diff failed: ${diff.error.message}`);
   if (diff.status === 0) {
     console.info('No changes to state file, skipping commit.');
     return;
   }
   git('commit', '-m', 'chore: update PR channel state [skip ci]');
-  git('push', 'origin', `HEAD:refs/heads/${process.env.GITHUB_REF_NAME}`);
+  const refName = process.env.GITHUB_REF_NAME;
+  if (!refName) {
+    throw new Error('GITHUB_REF_NAME is not set; cannot push state file');
+  }
+  git('push', 'origin', `HEAD:refs/heads/${refName}`);
 }
