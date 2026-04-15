@@ -46,10 +46,12 @@ export async function run() {
         ? channelState.lastDigestThreadTimestamp
         : await postOpenPrs(channelId, messagesForDigest));
 
-      state[channelId] = {
-        unresolvedMessageTimestamps: unresolvedTimestamps,
-        lastDigestThreadTimestamp: digestThreadTimestamp
-      };
+      if (trackUnresolved) {
+        state[channelId] = {
+          unresolvedMessageTimestamps: unresolvedTimestamps,
+          lastDigestThreadTimestamp: digestThreadTimestamp
+        };
+      }
     }
 
     saveState(stateFile, state);

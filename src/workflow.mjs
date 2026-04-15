@@ -141,7 +141,7 @@ export async function collectMessages(channelId, channelState, limit, maxPages, 
   const { lastDigestThreadTimestamp, unresolvedMessageTimestamps } = channelState;
 
   const { allMessages, postDigestMessages } = await fetchPagedMessages(
-    channelId, limit, maxPages, lastDigestThreadTimestamp
+    channelId, limit, maxPages, trackUnresolved ? lastDigestThreadTimestamp : null
   );
 
   const trackedMessages = trackUnresolved
