@@ -42757,17 +42757,24 @@ function getConfig() {
  * @param {boolean} trackUnresolved Whether to fetch individually-tracked messages
  * @returns {Promise<SlackMessage[]>} Deduplicated messages sorted ascending by ts
  */
-async function collectMessages(channelId, channelState, limit, maxPages, trackUnresolved) {
-  const { lastDigestThreadTimestamp, unresolvedMessageTimestamps } = channelState;
-
-  // Source 1: paginated history
-  const allFetchedMessages = [];
+/**
+ * Paginate channel history back to the last digest thread (or maxPages pages).
+ * Returns all fetched messages and the subset posted after the digest anchor.
+ *
+ * @param {string} channelId
+ * @param {number} limit Messages per page
+ * @param {number} maxPages Maximum pages to fetch
+ * @param {string|null} lastDigestThreadTimestamp Stop paginating when this ts is found
+ * @returns {Promise<{allMessages: SlackMessage[], postDigestMessages: SlackMessage[]}>}
+ */
+async function fetchPagedMessages(channelId, limit, maxPages, lastDigestThreadTimestamp) {
+  const allMessages = [];
   let cursor = undefined;
-
   let digestFound = false;
+
   for (let page = 0; page < maxPages; page++) {
     const { messages, nextCursor } = await (0,slack/* getMessagePage */.OT)(channelId, limit, cursor);
-    allFetchedMessages.push(...messages);
+    allMessages.push(...messages);
 
     if (lastDigestThreadTimestamp && messages.some(m => m.ts === lastDigestThreadTimestamp)) {
       digestFound = true;
@@ -42782,27 +42789,48 @@ async function collectMessages(channelId, channelState, limit, maxPages, trackUn
     console.warn(`Reached maxPages (${maxPages}) without finding last digest anchor for channel ${channelId}. Some messages may be missed. Consider increasing maxPages.`);
   }
 
-  console.info(`Fetched ${allFetchedMessages.length} messages across pages`);
+  console.info(`Fetched ${allMessages.length} messages across pages`);
 
-  const allFetchedTs = new Set(allFetchedMessages.map(m => m.ts));
   const postDigestMessages = lastDigestThreadTimestamp
-    ? allFetchedMessages.filter(m => parseFloat(m.ts) > parseFloat(lastDigestThreadTimestamp))
-    : [...allFetchedMessages];
+    ? allMessages.filter(m => parseFloat(m.ts) > parseFloat(lastDigestThreadTimestamp))
+    : [...allMessages];
 
-  // Source 2: previously-tracked messages that scrolled past the pagination window
-  const trackedMessages = [];
-  if (trackUnresolved) {
-    for (const ts of unresolvedMessageTimestamps) {
-      if (allFetchedTs.has(ts)) continue;
-      const message = await (0,slack/* getMessageByTimestamp */.D2)(channelId, ts);
-      if (message) {
-        trackedMessages.push(message);
-      }
+  return { allMessages, postDigestMessages };
+}
+
+/**
+ * Fetch previously-tracked unresolved messages that are not already in the fetched set.
+ * Skips any ts present in alreadyFetchedTs (message already retrieved via pagination).
+ * Skips any ts whose message has been deleted.
+ *
+ * @param {string} channelId
+ * @param {Array<string>} trackedTimestamps ts values from prior run state
+ * @param {Set<string>} alreadyFetchedTs ts values already retrieved in Source 1
+ * @returns {Promise<SlackMessage[]>}
+ */
+async function fetchTrackedMessages(channelId, trackedTimestamps, alreadyFetchedTs) {
+  const messages = [];
+  for (const ts of trackedTimestamps) {
+    if (alreadyFetchedTs.has(ts)) continue;
+    const message = await (0,slack/* getMessageByTimestamp */.D2)(channelId, ts);
+    if (message) {
+      messages.push(message);
     }
   }
+  return messages;
+}
 
-  // Merge and sort ascending — no deduplication needed since trackedMessages
-  // only contains ts values absent from allFetchedTs (and thus postDigestMessages)
+async function collectMessages(channelId, channelState, limit, maxPages, trackUnresolved) {
+  const { lastDigestThreadTimestamp, unresolvedMessageTimestamps } = channelState;
+
+  const { allMessages, postDigestMessages } = await fetchPagedMessages(
+    channelId, limit, maxPages, lastDigestThreadTimestamp
+  );
+
+  const trackedMessages = trackUnresolved
+    ? await fetchTrackedMessages(channelId, unresolvedMessageTimestamps, new Set(allMessages.map(m => m.ts)))
+    : [];
+
   const result = [...postDigestMessages, ...trackedMessages]
     .sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
 
