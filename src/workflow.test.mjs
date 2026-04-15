@@ -102,6 +102,16 @@ describe('getConfig', () => {
     expect(channelConfig).toHaveLength(1);
     expect(channelConfig[0].channelId).toBe('C456');
   });
+
+  it('defaults allowBotMessages to false when omitted from channel config', () => {
+    fs.readFileSync.mockReturnValue(JSON.stringify({
+      channels: { ch1: { channelId: 'C123' } },
+    }));
+
+    const { channelConfig } = getConfig();
+
+    expect(channelConfig[0].allowBotMessages).toBe(false);
+  });
 });
 
 describe('collectMessages', () => {

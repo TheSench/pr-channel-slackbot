@@ -22,6 +22,7 @@ import { distinct } from './utils.mjs';
  * @property {number} maxPages
  * @property {boolean} trackUnresolved
  * @property {boolean} disableReactionCopying
+ * @property {boolean} allowBotMessages
  */
 /**
  * @typedef {Object} PrMessage
@@ -51,7 +52,8 @@ export function getConfig() {
       limit: it.limit ?? 50,
       maxPages: it.maxPages ?? 1,
       trackUnresolved: it.trackUnresolved ?? false,
-      disableReactionCopying: it.disableReactionCopying ?? false
+      disableReactionCopying: it.disableReactionCopying ?? false,
+      allowBotMessages: it.allowBotMessages ?? false
     }))
     .filter(it => it.channelId && !it.disabled);
 
