@@ -14,22 +14,6 @@ function slackClient() {
 }
 
 /**
- * Get the last {limit} messages from {channelId} in ascending order.
- * 
- * @param {string} channelId
- * @param {number} limit
- */
-export async function getMessages(channelId, limit) {
-  const history = await slackClient().conversations.history({
-    channel: channelId,
-    limit
-  });
-  console.info(`Processing ${history.messages?.length ?? 0} messages`);
-  return (history.messages ?? [])
-    .sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
-}
-
-/**
  * Fetch a single page of messages from {channelId}.
  * @param {string} channelId
  * @param {number} limit
