@@ -31,9 +31,11 @@ vi.mock('./state.mjs', () => ({
 }));
 
 import { run } from './index.mjs';
-import { getConfig, collectMessages } from './workflow.mjs';
+import { getConfig, collectMessages, shouldProcess, getAggregateStatus, buildPrMessage } from './workflow.mjs';
 import { loadState, saveState, getChannelState } from './state.mjs';
-import { postOpenPrs } from './slack.mjs';
+import { postOpenPrs, addReaction } from './slack.mjs';
+import { extractPullRequests } from './github.mjs';
+import { getBooleanInput, setFailed } from '@actions/core';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -41,6 +43,9 @@ beforeEach(() => {
   getConfig.mockReturnValue({ reactionConfig: { merged: [], closed: [] }, channelConfig: [] });
   loadState.mockReturnValue({});
   postOpenPrs.mockResolvedValue('digest-ts');
+  // Reset these explicitly since vi.clearAllMocks() does not reset mockReturnValue
+  getBooleanInput.mockReturnValue(false);
+  shouldProcess.mockReturnValue(false);
 });
 
 const BASE_CHANNEL = {
@@ -86,6 +91,106 @@ describe('run()', () => {
 
       const [, savedState] = saveState.mock.calls[0];
       expect(savedState).toHaveProperty('C123');
+    });
+  });
+
+  describe('when a message has a resolved PR', () => {
+    const PR_MESSAGE = { ts: '123.0', text: 'PR message' };
+
+    beforeEach(() => {
+      getConfig.mockReturnValue({
+        reactionConfig: { merged: ['white-check-mark'], closed: ['x'], approved: ['approved'], changesRequested: ['changes-requested'] },
+        channelConfig: [{ ...BASE_CHANNEL, trackUnresolved: false }],
+      });
+      collectMessages.mockResolvedValue([PR_MESSAGE]);
+      extractPullRequests.mockReturnValue([{ owner: 'org', repo: 'repo', pull_number: '1' }]);
+      shouldProcess.mockReturnValue(true);
+    });
+
+    it('adds a reaction when the PR is merged', async () => {
+      getAggregateStatus.mockResolvedValue('merged');
+
+      await run();
+
+      expect(addReaction).toHaveBeenCalledWith('C123', PR_MESSAGE.ts, 'white-check-mark');
+    });
+
+    it('adds a reaction when the PR is closed', async () => {
+      getAggregateStatus.mockResolvedValue('closed');
+
+      await run();
+
+      expect(addReaction).toHaveBeenCalledWith('C123', PR_MESSAGE.ts, 'x');
+    });
+  });
+
+  describe('when a message has an open PR', () => {
+    const PR_MESSAGE = { ts: '123.0', text: 'PR message' };
+    const DIGEST_ENTRY = { permalink: 'https://slack.com/link', reactions: ['approved'] };
+
+    beforeEach(() => {
+      getConfig.mockReturnValue({
+        reactionConfig: { merged: ['merged'], closed: ['closed'], approved: ['approved'], changesRequested: ['changes-requested'] },
+        channelConfig: [{ ...BASE_CHANNEL, trackUnresolved: true }],
+      });
+      collectMessages.mockResolvedValue([PR_MESSAGE]);
+      extractPullRequests.mockReturnValue([{}]);
+      shouldProcess.mockReturnValue(true);
+      getAggregateStatus.mockResolvedValue('open');
+      buildPrMessage.mockResolvedValue(DIGEST_ENTRY);
+    });
+
+    it('includes the message in the digest', async () => {
+      await run();
+
+      expect(postOpenPrs).toHaveBeenCalledWith('C123', [DIGEST_ENTRY]);
+    });
+
+    it('records the message timestamp as unresolved in state', async () => {
+      await run();
+
+      const [, savedState] = saveState.mock.calls[0];
+      expect(savedState['C123'].unresolvedMessageTimestamps).toContain(PR_MESSAGE.ts);
+    });
+  });
+
+  describe('when skip-digest is true', () => {
+    const PREV_DIGEST_TS = 'prev-digest-ts';
+
+    beforeEach(() => {
+      getBooleanInput.mockReturnValue(true);
+      getConfig.mockReturnValue({
+        reactionConfig: { merged: ['merged'], closed: ['closed'] },
+        channelConfig: [{ ...BASE_CHANNEL, trackUnresolved: true }],
+      });
+      getChannelState.mockReturnValue({
+        unresolvedMessageTimestamps: [],
+        lastDigestThreadTimestamp: PREV_DIGEST_TS,
+      });
+      collectMessages.mockResolvedValue([]);
+    });
+
+    it('does not post a new digest thread', async () => {
+      await run();
+
+      expect(postOpenPrs).not.toHaveBeenCalled();
+    });
+
+    it('preserves the previous digest thread timestamp in state', async () => {
+      await run();
+
+      const [, savedState] = saveState.mock.calls[0];
+      expect(savedState['C123'].lastDigestThreadTimestamp).toBe(PREV_DIGEST_TS);
+    });
+  });
+
+  describe('when an error occurs', () => {
+    it('reports the failure without throwing', async () => {
+      getConfig.mockImplementation(() => { throw new Error('Config not found'); });
+
+      await run();
+
+      expect(setFailed).toHaveBeenCalledWith('Config not found');
     });
   });
 });
