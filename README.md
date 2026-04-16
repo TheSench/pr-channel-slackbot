@@ -112,7 +112,10 @@ jobs:
       - name: Commit state file
         run: |
           git add .github/pr-channel-state.json
-          git diff --cached --quiet || git commit -m "chore: update PR channel state [skip ci]" && git push
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update PR channel state [skip ci]"
+            git push
+          fi
 ```
 
 ### 3. Store your secrets
@@ -353,7 +356,10 @@ jobs:
       - name: Commit state file
         run: |
           git add .github/pr-channel-state.json
-          git diff --cached --quiet || git commit -m "chore: update PR channel state [skip ci]" && git push
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update PR channel state [skip ci]"
+            git push
+          fi
 ```
 
 ## Migrating from v1
