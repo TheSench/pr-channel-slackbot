@@ -30,11 +30,11 @@ The PR Channel Slackbot action does the following steps for each configured Slac
 2. **Check pull request Status**:
    - For each pull request link found:
      - If the message is already marked with a `closed` or `merged` reaction, it is skipped.
-     - Query GitHub for the status of the pull request. If the pull request is merged or closed, the corresponding reaction is added to the message and the action moves on to the next message.
+     - Query GitHub for the status of the pull request. If the pull request is merged or closed, the corresponding reaction is added to the message. If the message also has an entry in the previous digest thread, the same reaction is added there as well. The action then moves on to the next message.
      - If the pull request is still open, the retrieve the review status from GitHub. If changes are requested, the `changesRequested` reaction is added to the message. Otherwise, if there are approvals, the `approved` reaction is added.
 
 3. **Create New Thread**:
-   - After processing all relevant messages, the action creates a new thread in the pull request channel. This step (and the next two) can be skipped by setting `skip-digest: true`.
+   - After processing all relevant messages, the action creates a new thread in the pull request channel. If a previous digest thread exists, a reply is posted to it indicating that a new digest has been posted, with a link to the new one. This step (and the next two) can be skipped by setting `skip-digest: true`.
 
 4. **Add Responses**:
    - The action adds a response within the thread for each message containing a link to an open pull request.

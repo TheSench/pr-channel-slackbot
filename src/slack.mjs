@@ -58,6 +58,33 @@ export function addReaction(channelId, messageTs, reaction) {
   });
 }
 
+/**
+ * Fetch all reply messages in a thread, handling Slack pagination.
+ * @param {string} channelId
+ * @param {string} threadTs
+ * @returns {Promise<SlackMessage[]>}
+ */
+export async function getThreadReplies(channelId, threadTs) {
+  /** @type {SlackMessage[]} */
+  const messages = [];
+  let cursor = undefined;
+
+  while (true) {
+    const response = await slackClient().conversations.replies({
+      channel: channelId,
+      ts: threadTs,
+      cursor
+    });
+
+    messages.push(...(response.messages ?? []));
+
+    cursor = response.response_metadata?.next_cursor || undefined;
+    if (!cursor) break;
+  }
+
+  return messages;
+}
+
 export function getPermalink(channelId, messageTs) {
   return slackClient().chat.getPermalink({
     channel: channelId,
@@ -103,5 +130,14 @@ async function postPrMessage(channelId, threadId, message) {
     channel: channelId,
     thread_ts: threadId,
     text: `<${message.permalink}|Original message>`,
+  });
+}
+
+export async function markThreadSuperseded(channelId, oldThreadTs, newThreadTs) {
+  const permalink = await getPermalink(channelId, newThreadTs);
+  return slackClient().chat.postMessage({
+    channel: channelId,
+    thread_ts: oldThreadTs,
+    text: `A new digest has been posted. <${permalink}|View it here>.`
   });
 }

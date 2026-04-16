@@ -4,6 +4,7 @@ vi.mock('./slack.mjs', () => ({
   getMessagePage: vi.fn(),
   getMessageByTimestamp: vi.fn(),
   getPermalink: vi.fn(),
+  getThreadReplies: vi.fn(),
 }));
 vi.mock('./github.mjs', () => ({
   getPullRequestStatus: vi.fn(),
@@ -12,8 +13,8 @@ vi.mock('./github.mjs', () => ({
 vi.mock('@actions/core', () => ({ getInput: vi.fn() }));
 vi.mock('fs', () => ({ default: { readFileSync: vi.fn(), existsSync: vi.fn() } }));
 
-import { collectMessages, shouldProcess, getAggregateStatus, buildPrMessage, getConfig } from './workflow.mjs';
-import { getMessagePage, getMessageByTimestamp, getPermalink } from './slack.mjs';
+import { collectMessages, shouldProcess, getAggregateStatus, buildPrMessage, getConfig, buildDigestThreadMap } from './workflow.mjs';
+import { getMessagePage, getMessageByTimestamp, getPermalink, getThreadReplies } from './slack.mjs';
 import { getPullRequestStatus, getReviewReactions } from './github.mjs';
 import { getInput } from '@actions/core';
 import fs from 'fs';
@@ -376,5 +377,56 @@ describe('buildPrMessage', () => {
     const message = { ts: '1.0' };
     const result = await buildPrMessage('C123', message, pr, reactionConfig, false);
     expect(result.reactions).toEqual([]);
+  });
+});
+
+describe('buildDigestThreadMap', () => {
+  const DIGEST_TS = '100.0';
+  // ts 1700000000.000001 → permalink segment p1700000000000001
+  const ORIGINAL_TS = '1700000000.000001';
+  const ORIGINAL_PERMALINK = 'https://slack.com/archives/C123/p1700000000000001';
+  const REPLY_TS = '200.0';
+
+  it('returns an empty map when lastDigestThreadTimestamp is null', async () => {
+    const result = await buildDigestThreadMap('C123', null);
+
+    expect(getThreadReplies).not.toHaveBeenCalled();
+    expect(result.size).toBe(0);
+  });
+
+  it('maps original message ts to digest thread reply ts', async () => {
+    getThreadReplies.mockResolvedValue([
+      { ts: REPLY_TS, text: `<${ORIGINAL_PERMALINK}|Original message>` },
+    ]);
+
+    const result = await buildDigestThreadMap('C123', DIGEST_TS);
+
+    expect(result.get(ORIGINAL_TS)).toBe(REPLY_TS);
+  });
+
+  it('skips messages that do not contain an Original message link', async () => {
+    getThreadReplies.mockResolvedValue([
+      { ts: REPLY_TS, text: 'The following PRs are still open :thread:' },
+    ]);
+
+    const result = await buildDigestThreadMap('C123', DIGEST_TS);
+
+    expect(result.size).toBe(0);
+  });
+
+  it('builds entries for all matching replies in the thread', async () => {
+    const ORIGINAL_TS_2 = '1700000001.000002';
+    const PERMALINK_2 = 'https://slack.com/archives/C123/p1700000001000002';
+    const REPLY_TS_2 = '201.0';
+
+    getThreadReplies.mockResolvedValue([
+      { ts: REPLY_TS, text: `<${ORIGINAL_PERMALINK}|Original message>` },
+      { ts: REPLY_TS_2, text: `<${PERMALINK_2}|Original message>` },
+    ]);
+
+    const result = await buildDigestThreadMap('C123', DIGEST_TS);
+
+    expect(result.get(ORIGINAL_TS)).toBe(REPLY_TS);
+    expect(result.get(ORIGINAL_TS_2)).toBe(REPLY_TS_2);
   });
 });

@@ -1,6 +1,6 @@
 import { getBooleanInput, getInput, setFailed } from "@actions/core";
-import { getConfig, shouldProcess, getAggregateStatus, buildPrMessage, collectMessages } from "./workflow.mjs";
-import { addReaction, postOpenPrs } from "./slack.mjs";
+import { getConfig, shouldProcess, getAggregateStatus, buildPrMessage, collectMessages, buildDigestThreadMap } from "./workflow.mjs";
+import { addReaction, postOpenPrs, markThreadSuperseded } from "./slack.mjs";
 import { extractPullRequests } from "./github.mjs";
 import { loadState, saveState, getChannelState } from "./state.mjs";
 
@@ -15,6 +15,7 @@ export async function run() {
     for (let { channelId, limit, maxPages, trackUnresolved, enableReactionCopying, allowBotMessages } of channelConfig) {
       const channelState = getChannelState(state, channelId);
       const messages = await collectMessages(channelId, channelState, limit, maxPages, trackUnresolved);
+      const digestThreadMap = await buildDigestThreadMap(channelId, channelState.lastDigestThreadTimestamp);
 
       const messagesForDigest = [];
       const unresolvedTimestamps = [];
@@ -29,7 +30,12 @@ export async function run() {
         const status = await getAggregateStatus(pullRequests);
         if (['closed', 'merged'].includes(status)) {
           console.debug(`RESOLVING: ${message.ts} is ${status}`);
-          await addReaction(channelId, message.ts, reactionConfig[status][0]);
+          const reaction = reactionConfig[status][0];
+          await addReaction(channelId, message.ts, reaction);
+          const digestMessageTs = digestThreadMap.get(message.ts);
+          if (digestMessageTs) {
+            await addReaction(channelId, digestMessageTs, reaction);
+          }
           continue;
         }
 
@@ -42,9 +48,15 @@ export async function run() {
         }
       }
 
-      const digestThreadTimestamp = (skipDigest
-        ? channelState.lastDigestThreadTimestamp
-        : await postOpenPrs(channelId, messagesForDigest));
+      let digestThreadTimestamp;
+      if (skipDigest) {
+        digestThreadTimestamp = channelState.lastDigestThreadTimestamp;
+      } else {
+        digestThreadTimestamp = await postOpenPrs(channelId, messagesForDigest);
+        if (channelState.lastDigestThreadTimestamp) {
+          await markThreadSuperseded(channelId, channelState.lastDigestThreadTimestamp, digestThreadTimestamp);
+        }
+      }
 
       if (trackUnresolved) {
         state[channelId] = {

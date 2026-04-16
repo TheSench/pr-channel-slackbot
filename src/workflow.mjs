@@ -1,7 +1,7 @@
 import { getInput } from '@actions/core';
 import fs from 'fs';
 import { getPullRequestStatus, getReviewReactions } from './github.mjs';
-import { getPermalink, getMessagePage, getMessageByTimestamp } from './slack.mjs';
+import { getPermalink, getMessagePage, getMessageByTimestamp, getThreadReplies } from './slack.mjs';
 import { distinct } from './utils.mjs';
 
 /** @typedef {import('./slack.mjs').SlackMessage} SlackMessage */
@@ -155,6 +155,47 @@ export async function collectMessages(channelId, channelState, limit, maxPages, 
 
   console.info(`Processing ${result.length} messages`);
   return result;
+}
+
+/**
+ * Convert a Slack permalink URL to a message timestamp.
+ * Permalink format: https://workspace.slack.com/archives/CHANNEL/pTIMESTAMP
+ * where TIMESTAMP is the ts with the decimal removed (10 sec digits + 6 microsecond digits).
+ * @param {string} url
+ * @returns {string|null}
+ */
+function parseTsFromPermalink(url) {
+  const match = url.match(/\/p(\d{16})/);
+  if (!match) return null;
+  const digits = match[1];
+  return `${digits.slice(0, 10)}.${digits.slice(10)}`;
+}
+
+/**
+ * Build a map from original message ts to digest thread reply ts by fetching
+ * the thread under lastDigestThreadTimestamp and parsing each bot reply's
+ * "Original message" link.
+ *
+ * @param {string} channelId
+ * @param {string|null} lastDigestThreadTimestamp
+ * @returns {Promise<Map<string, string>>} Map from originalTs to digestThreadReplyTs
+ */
+export async function buildDigestThreadMap(channelId, lastDigestThreadTimestamp) {
+  if (!lastDigestThreadTimestamp) return new Map();
+
+  const threadMessages = await getThreadReplies(channelId, lastDigestThreadTimestamp);
+  const map = new Map();
+
+  for (const msg of threadMessages) {
+    const match = msg.text?.match(/<([^|>]+)\|Original message>/);
+    if (!match) continue;
+    const originalTs = parseTsFromPermalink(match[1]);
+    if (originalTs) {
+      map.set(originalTs, msg.ts);
+    }
+  }
+
+  return map;
 }
 
 export async function getAggregateStatus(pullRequests) {
