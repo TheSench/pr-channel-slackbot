@@ -12,7 +12,7 @@ export async function run() {
 
     const state = loadState(stateFile);
 
-    for (let { channelId, limit, maxPages, trackUnresolved, disableReactionCopying, allowBotMessages } of channelConfig) {
+    for (let { channelId, limit, maxPages, trackUnresolved, enableReactionCopying, allowBotMessages } of channelConfig) {
       const channelState = getChannelState(state, channelId);
       const messages = await collectMessages(channelId, channelState, limit, maxPages, trackUnresolved);
 
@@ -37,7 +37,7 @@ export async function run() {
 
         if (!skipDigest) {
           messagesForDigest.push(
-            await buildPrMessage(channelId, message, pullRequests[0], reactionConfig, disableReactionCopying)
+            await buildPrMessage(channelId, message, pullRequests[0], reactionConfig, enableReactionCopying)
           );
         }
       }

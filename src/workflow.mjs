@@ -21,7 +21,7 @@ import { distinct } from './utils.mjs';
  * @property {number} limit
  * @property {number} maxPages
  * @property {boolean} trackUnresolved
- * @property {boolean} disableReactionCopying
+ * @property {boolean} enableReactionCopying
  * @property {boolean} allowBotMessages
  */
 /**
@@ -51,9 +51,9 @@ export function getConfig() {
       ...it,
       limit: it.limit ?? 50,
       maxPages: it.maxPages ?? 1,
-      trackUnresolved: it.trackUnresolved ?? false,
-      disableReactionCopying: it.disableReactionCopying ?? false,
-      allowBotMessages: it.allowBotMessages ?? false
+      trackUnresolved: it.trackUnresolved ?? true,
+      enableReactionCopying: it.enableReactionCopying ?? false,
+      allowBotMessages: it.allowBotMessages ?? true
     }))
     .filter(it => it.channelId && !it.disabled);
 
@@ -217,13 +217,13 @@ function isResolved(message, reactionConfig) {
  * @param {ChannelConfig} channelConfig
  * @returns {Promise<PrMessage>}
  */
-export async function buildPrMessage(channelId, message, pullRequest, reactionConfig, disableReactionCopying) {
+export async function buildPrMessage(channelId, message, pullRequest, reactionConfig, enableReactionCopying) {
   /** @type {Array<string>} */
-  const existingReactions = disableReactionCopying
-    ? []
-    : (message.reactions ?? [])
+  const existingReactions = enableReactionCopying
+    ? (message.reactions ?? [])
       .map(reaction => reaction.name)
-      .filter(it => it);
+      .filter(it => it)
+    : [];
   const reviewReactions = await getReviewReactions(pullRequest, reactionConfig);
   const allReactions = distinct([...existingReactions, ...reviewReactions]);
   const permalink = await getPermalink(channelId, message.ts);

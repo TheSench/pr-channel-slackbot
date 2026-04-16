@@ -1,6 +1,6 @@
 {
   "name": "pr-channel-slackbot",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Simple Slackbot for managing a PR channel",
   "main": "dist/index.mjs",
   "scripts": {

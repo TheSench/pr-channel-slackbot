@@ -45,8 +45,8 @@ describe('getConfig', () => {
       channelId: 'C123',
       limit: 50,
       maxPages: 1,
-      trackUnresolved: false,
-      disableReactionCopying: false,
+      trackUnresolved: true,
+      enableReactionCopying: false,
     });
   });
 
@@ -103,14 +103,14 @@ describe('getConfig', () => {
     expect(channelConfig[0].channelId).toBe('C456');
   });
 
-  it('defaults allowBotMessages to false when omitted from channel config', () => {
+  it('defaults allowBotMessages to true when omitted from channel config', () => {
     fs.readFileSync.mockReturnValue(JSON.stringify({
       channels: { ch1: { channelId: 'C123' } },
     }));
 
     const { channelConfig } = getConfig();
 
-    expect(channelConfig[0].allowBotMessages).toBe(false);
+    expect(channelConfig[0].allowBotMessages).toBe(true);
   });
 });
 
@@ -342,33 +342,33 @@ describe('buildPrMessage', () => {
 
   it('returns the Slack permalink for the message', async () => {
     const message = { ts: '1.0' };
-    const result = await buildPrMessage('C123', message, pr, reactionConfig, true);
+    const result = await buildPrMessage('C123', message, pr, reactionConfig, false);
     expect(result.permalink).toBe('https://slack.com/archives/C123/p100');
   });
 
-  it('includes existing message reactions when disableReactionCopying is false', async () => {
+  it('includes existing message reactions when enableReactionCopying is true', async () => {
     const message = { ts: '1.0', reactions: [{ name: 'eyes' }, { name: 'rocket' }] };
-    const result = await buildPrMessage('C123', message, pr, reactionConfig, false);
+    const result = await buildPrMessage('C123', message, pr, reactionConfig, true);
     expect(result.reactions).toEqual(expect.arrayContaining(['eyes', 'rocket']));
   });
 
-  it('omits existing message reactions when disableReactionCopying is true', async () => {
+  it('omits existing message reactions when enableReactionCopying is false', async () => {
     const message = { ts: '1.0', reactions: [{ name: 'eyes' }] };
-    const result = await buildPrMessage('C123', message, pr, reactionConfig, true);
+    const result = await buildPrMessage('C123', message, pr, reactionConfig, false);
     expect(result.reactions).not.toContain('eyes');
   });
 
   it('includes reactions derived from GitHub reviews', async () => {
     getReviewReactions.mockResolvedValue(['approved']);
     const message = { ts: '1.0' };
-    const result = await buildPrMessage('C123', message, pr, reactionConfig, true);
+    const result = await buildPrMessage('C123', message, pr, reactionConfig, false);
     expect(result.reactions).toContain('approved');
   });
 
   it('deduplicates reactions that appear in both existing and review sources', async () => {
     getReviewReactions.mockResolvedValue(['approved']);
     const message = { ts: '1.0', reactions: [{ name: 'approved' }] };
-    const result = await buildPrMessage('C123', message, pr, reactionConfig, false);
+    const result = await buildPrMessage('C123', message, pr, reactionConfig, true);
     expect(result.reactions.filter(r => r === 'approved')).toHaveLength(1);
   });
 
