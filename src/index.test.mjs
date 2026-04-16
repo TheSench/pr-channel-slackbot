@@ -13,10 +13,12 @@ vi.mock('./workflow.mjs', () => ({
   shouldProcess: vi.fn(() => false),
   getAggregateStatus: vi.fn(),
   buildPrMessage: vi.fn(),
+  buildDigestThreadMap: vi.fn().mockResolvedValue(new Map()),
 }));
 vi.mock('./slack.mjs', () => ({
   addReaction: vi.fn(),
   postOpenPrs: vi.fn().mockResolvedValue('digest-ts'),
+  markThreadSuperseded: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('./github.mjs', () => ({
   extractPullRequests: vi.fn(() => []),
@@ -31,9 +33,9 @@ vi.mock('./state.mjs', () => ({
 }));
 
 import { run } from './index.mjs';
-import { getConfig, collectMessages, shouldProcess, getAggregateStatus, buildPrMessage } from './workflow.mjs';
+import { getConfig, collectMessages, shouldProcess, getAggregateStatus, buildPrMessage, buildDigestThreadMap } from './workflow.mjs';
 import { loadState, saveState, getChannelState } from './state.mjs';
-import { postOpenPrs, addReaction } from './slack.mjs';
+import { postOpenPrs, addReaction, markThreadSuperseded } from './slack.mjs';
 import { extractPullRequests } from './github.mjs';
 import { getBooleanInput, setFailed } from '@actions/core';
 
@@ -46,6 +48,7 @@ beforeEach(() => {
   // Reset these explicitly since vi.clearAllMocks() does not reset mockReturnValue
   getBooleanInput.mockReturnValue(false);
   shouldProcess.mockReturnValue(false);
+  buildDigestThreadMap.mockResolvedValue(new Map());
 });
 
 const BASE_CHANNEL = {
@@ -122,6 +125,24 @@ describe('run()', () => {
 
       expect(addReaction).toHaveBeenCalledWith('C123', PR_MESSAGE.ts, 'x');
     });
+
+    it('also adds the reaction to the digest thread entry when the message appears in the map', async () => {
+      const DIGEST_REPLY_TS = 'digest-reply-ts';
+      buildDigestThreadMap.mockResolvedValue(new Map([[PR_MESSAGE.ts, DIGEST_REPLY_TS]]));
+      getAggregateStatus.mockResolvedValue('merged');
+
+      await run();
+
+      expect(addReaction).toHaveBeenCalledWith('C123', DIGEST_REPLY_TS, 'white-check-mark');
+    });
+
+    it('does not add a second reaction call when the message is not in the digest thread map', async () => {
+      getAggregateStatus.mockResolvedValue('merged');
+
+      await run();
+
+      expect(addReaction).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('when a message has an open PR', () => {
@@ -181,6 +202,47 @@ describe('run()', () => {
 
       const [, savedState] = saveState.mock.calls[0];
       expect(savedState['C123'].lastDigestThreadTimestamp).toBe(PREV_DIGEST_TS);
+    });
+
+    it('does not mark the previous digest as superseded', async () => {
+      await run();
+
+      expect(markThreadSuperseded).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when posting a new digest', () => {
+    beforeEach(() => {
+      getConfig.mockReturnValue({
+        reactionConfig: { merged: ['merged'], closed: ['closed'] },
+        channelConfig: [{ ...BASE_CHANNEL, trackUnresolved: true }],
+      });
+      collectMessages.mockResolvedValue([]);
+    });
+
+    it('marks the previous digest thread as superseded', async () => {
+      const PREV_DIGEST_TS = 'prev-digest-ts';
+      const NEW_DIGEST_TS = 'new-digest-ts';
+      getChannelState.mockReturnValue({
+        unresolvedMessageTimestamps: [],
+        lastDigestThreadTimestamp: PREV_DIGEST_TS,
+      });
+      postOpenPrs.mockResolvedValue(NEW_DIGEST_TS);
+
+      await run();
+
+      expect(markThreadSuperseded).toHaveBeenCalledWith('C123', PREV_DIGEST_TS, NEW_DIGEST_TS);
+    });
+
+    it('does not mark any digest as superseded when there is no previous digest', async () => {
+      getChannelState.mockReturnValue({
+        unresolvedMessageTimestamps: [],
+        lastDigestThreadTimestamp: null,
+      });
+
+      await run();
+
+      expect(markThreadSuperseded).not.toHaveBeenCalled();
     });
   });
 

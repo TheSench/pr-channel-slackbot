@@ -42384,6 +42384,7 @@ async function run() {
     for (let { channelId, limit, maxPages, trackUnresolved, enableReactionCopying, allowBotMessages } of channelConfig) {
       const channelState = (0,_state_mjs__WEBPACK_IMPORTED_MODULE_4__/* .getChannelState */ .iJ)(state, channelId);
       const messages = await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .collectMessages */ .$I)(channelId, channelState, limit, maxPages, trackUnresolved);
+      const digestThreadMap = await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .buildDigestThreadMap */ .XW)(channelId, channelState.lastDigestThreadTimestamp);
 
       const messagesForDigest = [];
       const unresolvedTimestamps = [];
@@ -42398,7 +42399,12 @@ async function run() {
         const status = await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .getAggregateStatus */ .di)(pullRequests);
         if (['closed', 'merged'].includes(status)) {
           console.debug(`RESOLVING: ${message.ts} is ${status}`);
-          await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .addReaction */ .rU)(channelId, message.ts, reactionConfig[status][0]);
+          const reaction = reactionConfig[status][0];
+          await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .addReaction */ .rU)(channelId, message.ts, reaction);
+          const digestMessageTs = digestThreadMap.get(message.ts);
+          if (digestMessageTs) {
+            await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .addReaction */ .rU)(channelId, digestMessageTs, reaction);
+          }
           continue;
         }
 
@@ -42411,9 +42417,15 @@ async function run() {
         }
       }
 
-      const digestThreadTimestamp = (skipDigest
-        ? channelState.lastDigestThreadTimestamp
-        : await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .JZ)(channelId, messagesForDigest));
+      let digestThreadTimestamp;
+      if (skipDigest) {
+        digestThreadTimestamp = channelState.lastDigestThreadTimestamp;
+      } else {
+        digestThreadTimestamp = await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .JZ)(channelId, messagesForDigest);
+        if (channelState.lastDigestThreadTimestamp) {
+          await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .markThreadSuperseded */ .n6)(channelId, channelState.lastDigestThreadTimestamp, digestThreadTimestamp);
+        }
+      }
 
       if (trackUnresolved) {
         state[channelId] = {
@@ -42446,6 +42458,8 @@ __webpack_async_result__();
 /* harmony export */   "D2": () => (/* binding */ getMessageByTimestamp),
 /* harmony export */   "JZ": () => (/* binding */ postOpenPrs),
 /* harmony export */   "OT": () => (/* binding */ getMessagePage),
+/* harmony export */   "Um": () => (/* binding */ getThreadReplies),
+/* harmony export */   "n6": () => (/* binding */ markThreadSuperseded),
 /* harmony export */   "rU": () => (/* binding */ addReaction),
 /* harmony export */   "t5": () => (/* binding */ getPermalink)
 /* harmony export */ });
@@ -42511,6 +42525,20 @@ function addReaction(channelId, messageTs, reaction) {
   });
 }
 
+/**
+ * Fetch all reply messages in a thread.
+ * @param {string} channelId
+ * @param {string} threadTs
+ * @returns {Promise<SlackMessage[]>}
+ */
+async function getThreadReplies(channelId, threadTs) {
+  const response = await slackClient().conversations.replies({
+    channel: channelId,
+    ts: threadTs
+  });
+  return response.messages ?? [];
+}
+
 function getPermalink(channelId, messageTs) {
   return slackClient().chat.getPermalink({
     channel: channelId,
@@ -42556,6 +42584,15 @@ async function postPrMessage(channelId, threadId, message) {
     channel: channelId,
     thread_ts: threadId,
     text: `<${message.permalink}|Original message>`,
+  });
+}
+
+async function markThreadSuperseded(channelId, oldThreadTs, newThreadTs) {
+  const permalink = await getPermalink(channelId, newThreadTs);
+  return slackClient().chat.postMessage({
+    channel: channelId,
+    thread_ts: oldThreadTs,
+    text: `A new digest has been posted. <${permalink}|View it here>.`
   });
 }
 
@@ -42659,6 +42696,7 @@ function saveState(stateFile, state) {
 
 // EXPORTS
 __nccwpck_require__.d(__webpack_exports__, {
+  "XW": () => (/* binding */ buildDigestThreadMap),
   "wB": () => (/* binding */ buildPrMessage),
   "$I": () => (/* binding */ collectMessages),
   "di": () => (/* binding */ getAggregateStatus),
@@ -42841,6 +42879,47 @@ async function collectMessages(channelId, channelState, limit, maxPages, trackUn
 
   console.info(`Processing ${result.length} messages`);
   return result;
+}
+
+/**
+ * Convert a Slack permalink URL to a message timestamp.
+ * Permalink format: https://workspace.slack.com/archives/CHANNEL/pTIMESTAMP
+ * where TIMESTAMP is the ts with the decimal removed (10 sec digits + 6 microsecond digits).
+ * @param {string} url
+ * @returns {string|null}
+ */
+function parseTsFromPermalink(url) {
+  const match = url.match(/\/p(\d{16})/);
+  if (!match) return null;
+  const digits = match[1];
+  return `${digits.slice(0, 10)}.${digits.slice(10)}`;
+}
+
+/**
+ * Build a map from original message ts to digest thread reply ts by fetching
+ * the thread under lastDigestThreadTimestamp and parsing each bot reply's
+ * "Original message" link.
+ *
+ * @param {string} channelId
+ * @param {string|null} lastDigestThreadTimestamp
+ * @returns {Promise<Map<string, string>>} Map from originalTs to digestThreadReplyTs
+ */
+async function buildDigestThreadMap(channelId, lastDigestThreadTimestamp) {
+  if (!lastDigestThreadTimestamp) return new Map();
+
+  const threadMessages = await (0,slack/* getThreadReplies */.Um)(channelId, lastDigestThreadTimestamp);
+  const map = new Map();
+
+  for (const msg of threadMessages) {
+    const match = msg.text?.match(/<([^|>]+)\|Original message>/);
+    if (!match) continue;
+    const originalTs = parseTsFromPermalink(match[1]);
+    if (originalTs) {
+      map.set(originalTs, msg.ts);
+    }
+  }
+
+  return map;
 }
 
 async function getAggregateStatus(pullRequests) {
