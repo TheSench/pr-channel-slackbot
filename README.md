@@ -323,12 +323,10 @@ on:
       skip-digest:
         description: 'Skip posting the open PR digest'
         type: boolean
-        default: false
+        default: true
   schedule:
-    # Full digest at 12:00 and 17:00 (UTC) every weekday
-    - cron: '0 12,17 * * 1-5'
-    # Reaction-only cleanup every hour during business hours (except digest hours)
-    - cron: '0 9-11,13-16 * * 1-5'
+    # Run every hour on weekdays
+    - cron: '0 * * * 1-5'
 
 jobs:
   pr-channel-slackbot:
@@ -337,21 +335,36 @@ jobs:
       contents: write
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configure git user
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: PR Channel Slackbot
+      # When run via CRON, create digests at 8AM and 1PM ET
+      - name: Determine skip-digest
+        id: opts
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            HOUR=$(TZ="America/New_York" date +%-H)
+            if [[ "$HOUR" == "8" ]] || [[ "$HOUR" == "13" ]]; then
+              echo "skip-digest=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "skip-digest=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "skip-digest=${{ inputs.skip-digest }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open PRs
         uses: TheSench/pr-channel-slackbot@v2
         with:
           slack-token: ${{ secrets.SLACK_TOKEN }}
           github-token: ${{ secrets.PR_BOT_GITHUB_TOKEN }}
           config-file: '.github/pr_channel_slackbot_config.json'
           state-file: '.github/pr-channel-state.json'
-          skip-digest: ${{ github.event_name == 'schedule' && github.event.schedule != '0 12,17 * * 1-5' || inputs.skip-digest }}
+          skip-digest: ${{ steps.opts.outputs.skip-digest }}
 
       - name: Commit state file
         run: |
