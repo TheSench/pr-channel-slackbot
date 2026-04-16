@@ -53,10 +53,10 @@ Get up and running in about 5 minutes.
 
   > [!NOTE]
   > This action uses two separate tokens for different purposes:
-  > - The workflow's **default `GITHUB_TOKEN`** (granted via the `contents: write` job permission) commits the state file back to the workflow repo.
+  > - The workflow's **default `GITHUB_TOKEN`** (granted via the `contents: write` job permission) is used to commit the state file back to the workflow repo.
   > - The **`github-token` input** reads PR statuses from the repos being monitored — these are typically different repos, so the default `GITHUB_TOKEN` won't work here.
 
-- A repository where the GitHub Actions actor has push access (required for [Persistent PR Tracking](#persistent-pr-tracking-trackunresolved) — see that section to opt out).
+- If using [Persistent PR Tracking](#persistent-pr-tracking-trackunresolved): a repository where the GitHub Actions actor has push access. See that section for the full workflow setup, or opt out by setting `trackUnresolved: false`.
 
 ### 1. Create a config file
 
@@ -96,6 +96,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4  # Required to read the config file and write the state file
 
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: PR Channel Slackbot
         uses: TheSench/pr-channel-slackbot@v2
         with:
@@ -103,6 +108,11 @@ jobs:
           github-token: ${{ secrets.PR_BOT_GITHUB_TOKEN }}
           config-file: '.github/pr_channel_slackbot_config.json'
           state-file: '.github/pr-channel-state.json'
+
+      - name: Commit state file
+        run: |
+          git add .github/pr-channel-state.json
+          git diff --cached --quiet || git commit -m "chore: update PR channel state [skip ci]" && git push
 ```
 
 ### 3. Store your secrets
@@ -271,6 +281,8 @@ The state file is automatically committed and pushed back to the repository afte
 
 - Set `contents: write` on the job permissions
 - Include `actions/checkout@v4` before the bot step
+- Configure git user identity before the bot step
+- Commit and push the state file after the bot step
 - Provide the `state-file` input (defaults to `./pr-channel-state.json`)
 
 ```yaml
@@ -324,6 +336,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: PR Channel Slackbot
         uses: TheSench/pr-channel-slackbot@v2
         with:
@@ -332,6 +349,11 @@ jobs:
           config-file: '.github/pr_channel_slackbot_config.json'
           state-file: '.github/pr-channel-state.json'
           skip-digest: ${{ github.event_name == 'schedule' && github.event.schedule == '0 9-17 * * 1-5' || inputs.skip-digest }}
+
+      - name: Commit state file
+        run: |
+          git add .github/pr-channel-state.json
+          git diff --cached --quiet || git commit -m "chore: update PR channel state [skip ci]" && git push
 ```
 
 ## Migrating from v1
@@ -347,7 +369,7 @@ The `disableReactionCopying` field has been replaced by `enableReactionCopying` 
 
 Previously this field didn't exist and unresolved tracking was always off. In v2 it is on by default.
 
-- Requires adding `contents: write` permission to your workflow job AND the workflow actor must be allowed to commit directly to the branch.
+- Requires adding `contents: write` permission to your workflow job, a `git config` step to set user identity, a commit-and-push step after the bot runs, AND the workflow actor must be allowed to commit directly to the branch.
 - To restore the old behavior, explicitly set `"trackUnresolved": false` on each channel.
 
 ### `allowBotMessages` now defaults to `true`
