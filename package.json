@@ -1,5 +1,8 @@
 {
   "name": "pr-channel-slackbot",
+  "engines": {
+    "node": ">=24.0.0 <25.0.0"
+  },
   "version": "2.0.0",
   "description": "Simple Slackbot for managing a PR channel",
   "main": "dist/index.mjs",
@@ -24,12 +27,12 @@
   },
   "homepage": "https://github.com/TheSench/pr-channel-slackbot#readme",
   "devDependencies": {
-    "@vercel/ncc": "^0.38.1",
+    "@vercel/ncc": "^0.38.4",
     "vitest": "^4.1.4"
   },
   "dependencies": {
-    "@actions/core": "^1.10.1",
-    "@actions/github": "^6.0.0",
-    "@slack/web-api": "^7.0.4"
+    "@actions/core": "^3.0.0",
+    "@actions/github": "^9.1.0",
+    "@slack/web-api": "^7.15.1"
   }
 }
