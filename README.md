@@ -40,7 +40,7 @@ The PR Channel Slackbot action does the following steps for each configured Slac
    - The action adds a response within the thread for each message containing a link to an open pull request.
 
 5. **Copy Reactions**:
-   - Any reactions present on the original message are copied over to the response within the thread, ensuring continuity and visibility of feedback. This can be disabled per-channel via `disableReactionCopying`.
+   - Reactions are NOT copied by default. Reaction copying can be enabled per-channel via `enableReactionCopying`.
 
 ### Example Output
 ![alt text](images/example.png)
@@ -235,8 +235,7 @@ Example `pr_channel_slackbot_config.json`:
         },
         "project-bar-prs": {
             "channelId": "C654321",
-            "disableReactionCopying": true,
-            "allowBotMessages": true
+            "enableReactionCopying": true
         },
         "project-baz-prs": {
             "channelId": "C987654",
@@ -268,10 +267,32 @@ Each channel configuration can have the following fields:
     > [!NOTE]
     > It is recommended that you use a channel that is dedicated for pull requests to separate requests for reviews from other development-related conversations.  If your team is consistently reviewing pull requests, a large limit should not be required.
 * `maxPages` - (optional - default `1`) the maximum number of pages of Slack history to fetch. Increase this if your channel is high-volume and PRs may fall outside a single page. When `trackUnresolved` is enabled, pagination stops early once the previous digest thread is found.
-* `trackUnresolved` - (optional - default `false`) when `true`, the bot persists unresolved PR message timestamps and the last digest thread timestamp to the state file between runs. This ensures long-running PRs are never dropped from the digest even if they scroll outside the pagination window. Requires the `state-file` action input and `contents: write` workflow permission.
-* `allowBotMessages` - (optional - default `false`) when `true`, messages posted by bots are eligible for PR tracking. By default, bot messages are skipped.
+* `trackUnresolved` - (optional - default `true`) when `true`, the bot persists unresolved PR message timestamps and the last digest thread timestamp to the state file between runs. This ensures long-running PRs are never dropped from the digest even if they scroll outside the pagination window. Requires the `state-file` action input and `contents: write` workflow permission.
+* `allowBotMessages` - (optional - default `true`) when `true`, messages posted by bots are eligible for PR tracking. Set to `false` to skip bot messages.
 * `disabled` - (optional - default `false`) if you wish to disable a channel without completely removing it, you can mark it as disabled.
-* `disableReactionCopying` - (optional - default `false`) when `true`, reactions from the original message are not copied to the digest thread entry.
+* `enableReactionCopying` - (optional - default `false`) when `true`, reactions from the original message are copied to the digest thread entry.
+
+## Migrating from v1
+
+### `disableReactionCopying` → `enableReactionCopying`
+
+The `disableReactionCopying` field has been replaced by `enableReactionCopying` with inverted semantics. Reaction copying is now **opt-in** (disabled by default).
+
+- Had `"disableReactionCopying": true` → replace with `"enableReactionCopying": false` (or simply omit it — no behavior change; reactions still not copied)
+- Had `"disableReactionCopying": false` or omitted → add `"enableReactionCopying": true` if you want reactions copied (this was previously the default; now opt-in)
+
+### `trackUnresolved` now defaults to `true`
+
+Previously this field didn't exist and unresolved tracking was always off. In v2 it is on by default.
+
+- Requires adding `contents: write` permission to your workflow job AND the workflow actor must be allowed to commit directly to the branch.
+- To restore the old behavior, explicitly set `"trackUnresolved": false` on each channel.
+
+### `allowBotMessages` now defaults to `true`
+
+Previously bot messages were always blocked. In v2 they are included by default.
+
+- To restore the old behavior, explicitly set `"allowBotMessages": false` on each channel.
 
 ## License
 

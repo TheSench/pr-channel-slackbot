@@ -42381,7 +42381,7 @@ async function run() {
 
     const state = (0,_state_mjs__WEBPACK_IMPORTED_MODULE_4__/* .loadState */ .jw)(stateFile);
 
-    for (let { channelId, limit, maxPages, trackUnresolved, disableReactionCopying, allowBotMessages } of channelConfig) {
+    for (let { channelId, limit, maxPages, trackUnresolved, enableReactionCopying, allowBotMessages } of channelConfig) {
       const channelState = (0,_state_mjs__WEBPACK_IMPORTED_MODULE_4__/* .getChannelState */ .iJ)(state, channelId);
       const messages = await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .collectMessages */ .$I)(channelId, channelState, limit, maxPages, trackUnresolved);
 
@@ -42406,7 +42406,7 @@ async function run() {
 
         if (!skipDigest) {
           messagesForDigest.push(
-            await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .buildPrMessage */ .wB)(channelId, message, pullRequests[0], reactionConfig, disableReactionCopying)
+            await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .buildPrMessage */ .wB)(channelId, message, pullRequests[0], reactionConfig, enableReactionCopying)
           );
         }
       }
@@ -42707,7 +42707,7 @@ function distinct(array) {
  * @property {number} limit
  * @property {number} maxPages
  * @property {boolean} trackUnresolved
- * @property {boolean} disableReactionCopying
+ * @property {boolean} enableReactionCopying
  * @property {boolean} allowBotMessages
  */
 /**
@@ -42737,9 +42737,9 @@ function getConfig() {
       ...it,
       limit: it.limit ?? 50,
       maxPages: it.maxPages ?? 1,
-      trackUnresolved: it.trackUnresolved ?? false,
-      disableReactionCopying: it.disableReactionCopying ?? false,
-      allowBotMessages: it.allowBotMessages ?? false
+      trackUnresolved: it.trackUnresolved ?? true,
+      enableReactionCopying: it.enableReactionCopying ?? false,
+      allowBotMessages: it.allowBotMessages ?? true
     }))
     .filter(it => it.channelId && !it.disabled);
 
@@ -42903,13 +42903,13 @@ function isResolved(message, reactionConfig) {
  * @param {ChannelConfig} channelConfig
  * @returns {Promise<PrMessage>}
  */
-async function buildPrMessage(channelId, message, pullRequest, reactionConfig, disableReactionCopying) {
+async function buildPrMessage(channelId, message, pullRequest, reactionConfig, enableReactionCopying) {
   /** @type {Array<string>} */
-  const existingReactions = disableReactionCopying
-    ? []
-    : (message.reactions ?? [])
+  const existingReactions = enableReactionCopying
+    ? (message.reactions ?? [])
       .map(reaction => reaction.name)
-      .filter(it => it);
+      .filter(it => it)
+    : [];
   const reviewReactions = await (0,github/* getReviewReactions */.zp)(pullRequest, reactionConfig);
   const allReactions = distinct([...existingReactions, ...reviewReactions]);
   const permalink = await (0,slack/* getPermalink */.t5)(channelId, message.ts);
