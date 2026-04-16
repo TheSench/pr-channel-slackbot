@@ -40,7 +40,7 @@ The PR Channel Slackbot action does the following steps for each configured Slac
    - The action adds a response within the thread for each message containing a link to an open pull request.
 
 5. **Copy Reactions**:
-   - Any reactions present on the original message are copied over to the response within the thread, ensuring continuity and visibility of feedback.  This can be disabled via 
+   - Any reactions present on the original message are copied over to the response within the thread, ensuring continuity and visibility of feedback. This can be disabled per-channel via `disableReactionCopying`.
 
 ### Example Output
 ![alt text](images/example.png)
@@ -99,8 +99,6 @@ The following permissions are required for the workflow to be able to check the 
 
 ## Example Workflow
 
-The following example workflow 
-
 ```yaml
 name: PR Channel Slackbot
 
@@ -113,6 +111,8 @@ on:
 jobs:
   pr-channel-slackbot:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required when trackUnresolved is enabled (commits state file)
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -123,7 +123,8 @@ jobs:
           slack-token: ${{ secrets.SLACK_TOKEN }}
           github-token: ${{ secrets.PR_BOT_GITHUB_TOKEN }}
           config-file: '.github/pr_channel_slackbot_config.json'
-          # skip-digest: true  # Uncomment to skip posting the open PR digest thread
+          # skip-digest: true    # Uncomment to skip posting the open PR digest thread
+          # state-file: '.github/pr-channel-state.json'  # Customize state file location
 ```
 
 ## Action Inputs
@@ -134,6 +135,18 @@ jobs:
 | `github-token` | yes | | GitHub API token |
 | `config-file` | yes | | Path to the JSON configuration file |
 | `skip-digest` | no | `false` | When `true`, skips posting the open PR digest thread to Slack. Closed/merged PR reactions still fire normally. |
+| `state-file` | no | `./pr-channel-state.json` | Path to the state file used for persistent unresolved PR tracking. Only written when at least one channel has `trackUnresolved: true`. Requires `contents: write` permission on the workflow. |
+
+### When to use `state-file` / `trackUnresolved`
+
+When `trackUnresolved: true` is set on a channel, the bot persists the list of unresolved PR messages and the last digest thread timestamp to a JSON file after each run. On subsequent runs, it fetches any previously-tracked messages that fall outside the current pagination window, ensuring long-running PRs are never dropped from the digest.
+
+The state file is automatically committed and pushed back to the repository after each run (skipped if nothing changed). Set `contents: write` on the job permissions and ensure the `actions/checkout` step is present.
+
+```yaml
+permissions:
+  contents: write
+```
 
 ### When to use `skip-digest`
 
@@ -199,18 +212,21 @@ Example `pr_channel_slackbot_config.json`:
     "channels": {
         "project-foo-prs": {
             "channelId": "C123456",
-            "limit": 100
+            "limit": 100,
+            "maxPages": 2,
+            "trackUnresolved": true
         },
         "project-bar-prs": {
             "channelId": "C654321",
-            "disableReactionCopying": true
+            "disableReactionCopying": true,
+            "allowBotMessages": true
         },
         "project-baz-prs": {
             "channelId": "C987654",
             "limit": 50,
             "disabled": true
         }
-    },
+    }
 }
 ```
 
@@ -218,10 +234,10 @@ Example `pr_channel_slackbot_config.json`:
 
 The `reactions` section contains configuration for each reaction type used by the bot. Each reaction type accepts a list of reaction names that are considered to be part of that type.  If multiple reactions are provided for the same group, all of them will be considered matches when checking existing reactions on messages, but only the first one in the list will be used when the bot adds reactions.
 
-* `merged` - Any messages with a reaction in this group will be considered "resolved" (skipped).  If a pull request is merged in GitHub but not marked in Slack,  the first reaction from this group will be added to the message.
-* `merged` - Any messages with a reaction in this group will be considered "resolved" (skipped).  If a pull request is closed (without being merged) in GitHub but not marked in Slack,  the first reaction from this group will be added to the message.
-* `changesRequested` - Messages in this group do not impact how the bot processes Slack messages.  If a pull request is not closed, and it has been marked with requested changes, the first reaction from this group will be added to the message.
-* `approved` - Messages in this group do not impact how the bot processes Slack messages.  If a pull request is not closed, but has approvals on it (and no changes requested), the first reaction from this group will be added to the message.
+* `merged` - Any messages with a reaction in this group will be considered "resolved" (skipped). If a pull request is merged in GitHub but not marked in Slack, the first reaction from this group will be added to the message.
+* `closed` - Any messages with a reaction in this group will be considered "resolved" (skipped). If a pull request is closed (without being merged) in GitHub but not marked in Slack, the first reaction from this group will be added to the message.
+* `changesRequested` - Messages in this group do not impact how the bot processes Slack messages. If a pull request is not closed, and it has been marked with requested changes, the first reaction from this group will be added to the message.
+* `approved` - Messages in this group do not impact how the bot processes Slack messages. If a pull request is not closed, but has approvals on it (and no changes requested), the first reaction from this group will be added to the message.
 
 ### Channels
 
@@ -231,11 +247,14 @@ Each channel configuration can have the following fields:
 * `channelId` - (required) the ID of the channel.
     > [!NOTE]
     > If you do not know the ID of a channel, you can easily retrieve it from a link to that channel.  Simply right-click on the channel and select `Copy` > `Copy link`.  The last part of the link will be the channel ID.  For example, if your channel's link is `https://mycompany.slack.com/archives/C123456`, then the channel ID is `C123456`.
-* `limit` - (optional - default `50`) this limits how many messages in the channel will be reviewed for pull requests.  Only the last `<limit>` messages will be checked.
+* `limit` - (optional - default `50`) the maximum number of messages to fetch per page of Slack history.
     > [!NOTE]
     > It is recommended that you use a channel that is dedicated for pull requests to separate requests for reviews from other development-related conversations.  If your team is consistently reviewing pull requests, a large limit should not be required.
+* `maxPages` - (optional - default `1`) the maximum number of pages of Slack history to fetch. Increase this if your channel is high-volume and PRs may fall outside a single page. When `trackUnresolved` is enabled, pagination stops early once the previous digest thread is found.
+* `trackUnresolved` - (optional - default `false`) when `true`, the bot persists unresolved PR message timestamps and the last digest thread timestamp to the state file between runs. This ensures long-running PRs are never dropped from the digest even if they scroll outside the pagination window. Requires the `state-file` action input and `contents: write` workflow permission.
+* `allowBotMessages` - (optional - default `false`) when `true`, messages posted by bots are eligible for PR tracking. By default, bot messages are skipped.
 * `disabled` - (optional - default `false`) if you wish to disable a channel without completely removing it, you can mark it as disabled.
-* `disableReactionCopying` - (optional - default `false`) disable copying of reactions from the original post to the threads when `true`.
+* `disableReactionCopying` - (optional - default `false`) when `true`, reactions from the original message are not copied to the digest thread entry.
 
 ## License
 
