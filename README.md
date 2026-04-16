@@ -1,103 +1,82 @@
 # PR Channel Slackbot
 
-This GitHub Action checks Slack channels for pull requests that have been posted and ensures they are either merged or closed. It automates the process of monitoring and managing pull requests within your Slack workspace.
+A GitHub Action that monitors Slack channels for open pull requests and automatically marks them merged, closed, or approved — keeping your PR review channel clean and up to date.
 
-## Recommended Practices for Using the PR Channel Slackbot
+![Example output showing PR digest thread with statuses](images/example.png)
 
-This action is intended for use with a pull request review workflow that incorporates the following steps:
+## Contents
 
-1. **Create a Dedicated Slack Channel**: Establish a separate Slack channel specifically for pull requests, such as `#pr-reviews` or `#pull-requests`. This dedicated space ensures focused discussions and avoids cluttering general development conversations.
+- [Recommended Practices](#recommended-practices)
+- [Quick Start](#quick-start)
+- [How it Works](#how-it-works)
+- [Reference](#reference)
+- [Advanced Usage](#advanced-usage)
+- [Migrating from v1](#migrating-from-v1)
+- [License](#license)
 
-2. **Post pull request Links**: Developers post links to their pull requests needing review in the dedicated pull request channel. This step actively signals that the pull requests are ready for review and invites team members to provide feedback.
-  > [!Note]
-  > It is recommended that each pull request is posted in its own message.  Messages containing multiple pull requests are supported, but there is no way to indiciate the status of them individually via reactions.
+## Recommended Practices
 
-3. **Use Reactions for Review Statuses**: These reactions indicate that a pull request has been reviewed already, so reviewers may want to focus on other pull requests first.
-   - **Approval**: Team members can add an "approved" reaction (e.g., ✅) to the corresponding message if they've approved it.
-   - **Changes Requested**: Team members can use the "changes requested" reaction (e.g., 🔄) to indicate that modifications are required before the pull request can be approved.
+This action is designed around a pull request review workflow that uses a dedicated Slack channel. The following practices make the most of what it provides:
 
-4. **Use Reactions for pull request Closure**: These reactions indicate that a pull request no longer needs a review so that reviewers can focus on other pull requests.
-   - **Merge**: Upon merging a pull request, the "merged" reaction (e.g., 🚀) can be added.
-   - **Closure**: If a pull request is closed without merging, the "closed" reaction (e.g., ❌).
+1. **Create a Dedicated Slack Channel**: Establish a separate channel specifically for pull requests, such as `#pr-reviews` or `#pull-requests`. This keeps review requests visible and avoids cluttering general development channels.
 
-## How it Works
+2. **Post Pull Request Links**: Developers post links to their pull requests in the dedicated channel when they are ready for review. This signals that feedback is welcome and gives the bot a message to react to.
 
-The PR Channel Slackbot action does the following steps for each configured Slack channel:
+   > [!NOTE]
+   > It is recommended that each pull request is posted in its own message. Messages containing multiple pull requests are supported, but there is no way to indicate the status of them individually via reactions.
 
-1. **Read Chat History**:
-   - Scan through the chat history (excluding messages inside threads) to locate messages containing links to pull requests.
+3. **Use Reactions for Review Status**: These reactions indicate that a pull request has already received attention, so other reviewers can prioritize accordingly.
+   - **Approval**: Add an "approved" reaction (e.g., ✅) once you have approved the pull request.
+   - **Changes Requested**: Add a "changes requested" reaction (e.g., 🔄) to indicate modifications are needed before the pull request can be approved.
 
-2. **Check pull request Status**:
-   - For each pull request link found:
-     - If the message is already marked with a `closed` or `merged` reaction, it is skipped.
-     - Query GitHub for the status of the pull request. If the pull request is merged or closed, the corresponding reaction is added to the message. If the message also has an entry in the previous digest thread, the same reaction is added there as well. The action then moves on to the next message.
-     - If the pull request is still open, the retrieve the review status from GitHub. If changes are requested, the `changesRequested` reaction is added to the message. Otherwise, if there are approvals, the `approved` reaction is added.
+4. **Use Reactions for Pull Request Closure**: These reactions tell the bot (and your teammates) that a pull request no longer needs review.
+   - **Merged**: Add a "merged" reaction (e.g., 🚀) when a pull request is merged. The bot can also add this automatically.
+   - **Closed**: Add a "closed" reaction (e.g., ❌) when a pull request is closed without merging. The bot can also add this automatically.
 
-3. **Create New Thread**:
-   - After processing all relevant messages, the action creates a new thread in the pull request channel. If a previous digest thread exists, a reply is posted to it indicating that a new digest has been posted, with a link to the new one. This step (and the next two) can be skipped by setting `skip-digest: true`.
+## Quick Start
 
-4. **Add Responses**:
-   - The action adds a response within the thread for each message containing a link to an open pull request.
+Get up and running in about 5 minutes.
 
-5. **Copy Reactions**:
-   - Reactions are NOT copied by default. Reaction copying can be enabled per-channel via `enableReactionCopying`.
+### Prerequisites
 
-### Example Output
-![alt text](images/example.png)
+- **Slack bot token** with the following scopes:
+  - `channels:history` — read public channel history
+  - `groups:history` — read private channel history (for channels the app is invited to)
+  - `chat:write` — post messages
+  - `reactions:write` — add emoji reactions to messages
 
-### Handling Messages with Multiple Pull Requests
+  [Create a Slack app and get a token →](https://api.slack.com/tutorials/tracks/getting-a-token)
 
-When a message contains multiple pull request links, the aggregate status of these pull requests is considered to determine whether the message should be marked as `merged`, `closed`, or `approved`. In these cases, the "least common denominator" of the statuses is used:
+- **GitHub token** with access to the repos whose PRs you want to monitor:
+  - Fine-grained: `pull_requests:read`
+  - Classic: `repo`
 
-1. **All Closed-Without-Merge PRs**:
-   - If all pull requests are closed (without being merged), the message is treated as "closed."
+  > [!NOTE]
+  > This action uses two separate tokens for different purposes:
+  > - The workflow's **default `GITHUB_TOKEN`** (granted via the `contents: write` job permission) commits the state file back to the workflow repo.
+  > - The **`github-token` input** reads PR statuses from the repos being monitored — these are typically different repos, so the default `GITHUB_TOKEN` won't work here.
 
-2. **Mixed Closed Status (Some Closed, Some Merged)**:
-   - If all pull requests are closed, and at least some are merged, the message is treated as "merged."
+- A repository where the GitHub Actions actor has push access (required for [Persistent PR Tracking](#persistent-pr-tracking-trackunresolved) — see that section to opt out).
 
-3. **All Approved PRs**:
-   - If all pull requests are approved (and none are marked as having changes requested), the message is treated as "approved."
+### 1. Create a config file
 
-## Usage
+Add `.github/pr_channel_slackbot_config.json` to your repo:
 
-To use this GitHub Action in your workflow, follow these steps:
+```json
+{
+    "channels": {
+        "my-prs": {
+            "channelId": "C123456"
+        }
+    }
+}
+```
 
-1. **Set Up Slack Integration**: 
-    - Obtain a Slack API token from your Slack workspace (see [Slack Token](#slack-token)).
+Replace `C123456` with your channel's ID. To find it: right-click the channel in Slack → **Copy link** — the ID is the last segment of the URL (e.g. `https://mycompany.slack.com/archives/C123456`).
 
-2. **Configure GitHub Token**:
-    - Obtain a `github-token` with the necessary permissions (see [GitHub Token](#github-token)).
+### 2. Add a workflow
 
-3. **Create a Configuration File**:
-    - Prepare a JSON configuration file with the required settings (see [Configuration File](#configuration-file)).
-
-4. **Create a Workflow**:
-    - Add a workflow file (e.g., `.github/workflows/pr_channel_slackbot.yml`) in your repository to run this action with the necessary configuration, including inputs for the Slack API token, GitHub API token, and the path to the configuration file (see [Example Workflow](#example-workflow)).
-
-## Token Permissions
-
-### Slack Token
-
-A valid Slack API bot token is required for this workflow to be able to read and post messages.  This can be a token for an existing internal Slack App, or you can [create a new Slack App](https://api.slack.com/tutorials/tracks/getting-a-token).  All messages will be posted as the app tied to the provided token.  In order to be able to read and post in private channels, the app must be added to those channels in Slack.
-
-In addition, the following scopes must be requested on the bot token:
-* `channels:history` (see messages in public channels)
-* `groups:history` (see messages in private channels that the app is invited to)
-* `chat:write` (post messsages)
-* `reactions:write` (add reactions to messages)
-
-### GitHub Token
-
-> [!WARNING]  
-> The default `GITHUB_TOKEN` will not work for monitoring channels with pull requests from private repositories. You will need to configure a custom token from an account with read access to all relevant repositories.
-
-The account tied to the `github-token` must have read access to all repositories that you with to manage pull requests for.  If a pull request is posted for a repository that it does not have access to, it will not be able to retrieve its status, limiting functionality.  In these cases, automatic emoji reactions will be disabled, and the workflow will only use the presence of `merged`/`closed` reactions to determine if it should include a pull request in the thread or not.
-
-The following permissions are required for the workflow to be able to check the status of pull requests:
-* Fine-grained access tokens: `pull_requests:read`
-* Classic access tokens: `repo`
-
-## Example Workflow
+Add `.github/workflows/pr_channel_slackbot.yml`:
 
 ```yaml
 name: PR Channel Slackbot
@@ -112,13 +91,13 @@ jobs:
   pr-channel-slackbot:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Required when any channel has trackUnresolved: true
+      contents: write  # Allows the default GITHUB_TOKEN to commit the state file
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4  # Required to read the config file and write the state file
 
       - name: PR Channel Slackbot
-        uses: TheSench/pr-channel-slackbot@v1
+        uses: TheSench/pr-channel-slackbot@v2
         with:
           slack-token: ${{ secrets.SLACK_TOKEN }}
           github-token: ${{ secrets.PR_BOT_GITHUB_TOKEN }}
@@ -126,88 +105,95 @@ jobs:
           state-file: '.github/pr-channel-state.json'
 ```
 
-With a matching config that enables `trackUnresolved` on a channel:
+### 3. Store your secrets
 
-```json
-{
-    "channels": {
-        "my-prs": {
-            "channelId": "C123456",
-            "trackUnresolved": true
-        }
-    }
-}
-```
+In your repo, go to **Settings → Secrets and variables → Actions** and add:
 
-When `trackUnresolved` is enabled, the bot commits the updated state file back to the repository after each run (skipped if nothing changed), so previously-tracked unresolved PRs are carried forward even if they scroll outside the pagination window.
+| Secret | Value |
+|--------|-------|
+| `SLACK_TOKEN` | Your Slack bot token |
+| `PR_BOT_GITHUB_TOKEN` | Your GitHub token with access to the monitored repos |
 
-## Action Inputs
+That's it. On the next scheduled run (or via **Actions → PR Channel Slackbot → Run workflow**), the bot will scan your Slack channel and post a digest of open pull requests.
+
+## How it Works
+
+For each configured Slack channel, the action runs these steps:
+
+1. **Read Chat History**: Scans channel messages (excluding thread replies) to find messages containing GitHub pull request links.
+
+2. **Check Pull Request Status**: For each pull request link found:
+   - If the message already has a `closed` or `merged` reaction, it is skipped.
+   - The action queries GitHub for the pull request's status. If it is merged or closed, the corresponding reaction is added to the Slack message (and to its entry in the previous digest thread, if one exists). The action then moves on.
+   - If the pull request is still open, the action checks its review status. If changes have been requested, the `changesRequested` reaction is added. Otherwise, if there are approvals, the `approved` reaction is added.
+
+3. **Create a New Digest Thread**: After processing all messages, the action posts a new thread in the channel summarizing open pull requests. If a previous digest thread exists, a reply is added to it linking to the new one. This step (and the next two) can be skipped with `skip-digest: true` — see [Reaction-Only Mode](#reaction-only-mode-skip-digest).
+
+4. **Add Digest Entries**: One reply per open pull request message is added to the new thread.
+
+5. **Copy Reactions** *(optional)*: If `enableReactionCopying` is enabled for the channel, reactions from the original message are copied to the digest thread entry.
+
+### Handling Messages with Multiple Pull Requests
+
+When a message contains links to more than one pull request, the action uses the aggregate status to decide how to react:
+
+1. **All closed without merge** → message is treated as "closed"
+2. **All closed, at least one merged** → message is treated as "merged"
+3. **All approved, none with changes requested** → message is treated as "approved"
+
+## Reference
+
+### Token Permissions
+
+This action uses two tokens for different purposes:
+
+| Token | Purpose | Where configured |
+|-------|---------|-----------------|
+| Default `GITHUB_TOKEN` | Commits the state file back to the workflow repo | `permissions: contents: write` on the job |
+| `github-token` input | Reads PR statuses from the repos being monitored | `secrets.PR_BOT_GITHUB_TOKEN` |
+
+#### Slack Token
+
+A valid Slack API bot token is required to read and post messages. This can be a token for an existing Slack app, or you can [create a new one](https://api.slack.com/tutorials/tracks/getting-a-token). All messages are posted as the app tied to the provided token.
+
+To read and post in private channels, the app must be invited to those channels in Slack.
+
+Required bot token scopes:
+
+- `channels:history` — read public channel history
+- `groups:history` — read private channel history
+- `chat:write` — post messages
+- `reactions:write` — add emoji reactions
+
+#### GitHub Token (`github-token` input)
+
+The `github-token` input is used to query pull request status and review information from GitHub. It must have access to every repository whose PRs appear in your monitored channels.
+
+> [!WARNING]
+> The default `GITHUB_TOKEN` will not work here. It is scoped to the repository running the workflow, not the repositories being monitored. Use a dedicated token (stored as `PR_BOT_GITHUB_TOKEN` or similar) with access to the target repos.
+
+If the token cannot access a repository, automatic reactions are disabled for that repo's PRs, and the bot falls back to using only manually-added `merged`/`closed` reactions to determine status.
+
+Required permissions:
+
+- Fine-grained access tokens: `pull_requests:read`
+- Classic access tokens: `repo`
+
+### Action Inputs
 
 | Input | Required | Default | Description |
 |---|---|---|---|
 | `slack-token` | yes | | Slack API bot token |
-| `github-token` | yes | | GitHub API token |
+| `github-token` | yes | | GitHub API token for reading PR statuses from monitored repos |
 | `config-file` | yes | | Path to the JSON configuration file |
 | `skip-digest` | no | `false` | When `true`, skips posting the open PR digest thread to Slack. Closed/merged PR reactions still fire normally. |
 | `state-file` | no | `./pr-channel-state.json` | Path to the state file used for persistent unresolved PR tracking. Only written when at least one channel has `trackUnresolved: true`. Requires `contents: write` permission on the workflow. |
 
-### When to use `state-file` / `trackUnresolved`
+### Configuration File
 
-When `trackUnresolved: true` is set on a channel, the bot persists the list of unresolved PR messages and the last digest thread timestamp to a JSON file after each run. On subsequent runs, it fetches any previously-tracked messages that fall outside the current pagination window, ensuring long-running PRs are never dropped from the digest.
+The configuration file (e.g., `.github/pr_channel_slackbot_config.json`) has two sections: `reactions` and `channels`.
 
-The state file is automatically committed and pushed back to the repository after each run (skipped if nothing changed). Set `contents: write` on the job permissions and ensure the `actions/checkout` step is present.
-
-```yaml
-permissions:
-  contents: write
-```
-
-### When to use `skip-digest`
-
-Use `skip-digest: true` when you want the bot to mark merged/closed PRs with reactions without posting a new digest thread to the channel every time it runs.
-
-A common pattern is to run the full digest on a regular schedule (e.g., twice a day) and a cleanup-only run more frequently or on-demand:
-
-```yaml
-name: PR Channel Slackbot
-
-on:
-  workflow_dispatch:
-    inputs:
-      skip-digest:
-        description: 'Skip posting the open PR digest'
-        type: boolean
-        default: false
-  schedule:
-    # Full digest at 12:00 and 17:00 (UTC) every weekday
-    - cron: '0 12,17 * * 1-5'
-    # Cleanup-only every hour during business hours
-    - cron: '0 9-17 * * 1-5'
-
-jobs:
-  pr-channel-slackbot:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write  # Required when any channel has trackUnresolved: true
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: PR Channel Slackbot
-        uses: TheSench/pr-channel-slackbot@v1
-        with:
-          slack-token: ${{ secrets.SLACK_TOKEN }}
-          github-token: ${{ secrets.PR_BOT_GITHUB_TOKEN }}
-          config-file: '.github/pr_channel_slackbot_config.json'
-          state-file: '.github/pr-channel-state.json'
-          skip-digest: ${{ github.event_name == 'schedule' && github.event.schedule == '0 9-17 * * 1-5' || inputs.skip-digest }}
-```
-
-## Configuration File
-
-The configuration file (e.g., `.github/pr_channel_slackbot_config.json`) contains two groups of configurations, one for emojis interpreted by or used by the bot, and one for configuring which channels should be monitored.
-
-Example `pr_channel_slackbot_config.json`:
+Example:
 
 ```json
 {
@@ -246,31 +232,107 @@ Example `pr_channel_slackbot_config.json`:
 }
 ```
 
-### Reactions
+#### Reactions
 
-The `reactions` section contains configuration for each reaction type used by the bot. Each reaction type accepts a list of reaction names that are considered to be part of that type.  If multiple reactions are provided for the same group, all of them will be considered matches when checking existing reactions on messages, but only the first one in the list will be used when the bot adds reactions.
+Each reaction type accepts a list of emoji names. When checking existing reactions, all names in the list are recognized. When the bot adds a reaction, it uses the first name in the list.
 
-* `merged` - Any messages with a reaction in this group will be considered "resolved" (skipped). If a pull request is merged in GitHub but not marked in Slack, the first reaction from this group will be added to the message.
-* `closed` - Any messages with a reaction in this group will be considered "resolved" (skipped). If a pull request is closed (without being merged) in GitHub but not marked in Slack, the first reaction from this group will be added to the message.
-* `changesRequested` - Messages in this group do not impact how the bot processes Slack messages. If a pull request is not closed, and it has been marked with requested changes, the first reaction from this group will be added to the message.
-* `approved` - Messages in this group do not impact how the bot processes Slack messages. If a pull request is not closed, but has approvals on it (and no changes requested), the first reaction from this group will be added to the message.
+| Key | Behavior |
+|-----|----------|
+| `merged` | Messages with this reaction are skipped. Added automatically when a PR is merged. |
+| `closed` | Messages with this reaction are skipped. Added automatically when a PR is closed without merging. |
+| `changesRequested` | Does not affect message processing. Added when a PR has open change requests. |
+| `approved` | Does not affect message processing. Added when a PR has approvals and no change requests. |
 
-### Channels
+#### Channels
 
-The `channels` section contains a map of human-readable channel names to channel configurations.  The name of the keys here does not impact processing.  It is recommended that the keys match the name of the assocaited channel for clarity.
+The `channels` section is a map of human-readable names to channel configurations. The key names are for your reference only and do not affect processing. Use names that match your actual Slack channel names for clarity.
 
-Each channel configuration can have the following fields:
-* `channelId` - (required) the ID of the channel.
-    > [!NOTE]
-    > If you do not know the ID of a channel, you can easily retrieve it from a link to that channel.  Simply right-click on the channel and select `Copy` > `Copy link`.  The last part of the link will be the channel ID.  For example, if your channel's link is `https://mycompany.slack.com/archives/C123456`, then the channel ID is `C123456`.
-* `limit` - (optional - default `50`) the maximum number of messages to fetch per page of Slack history.
-    > [!NOTE]
-    > It is recommended that you use a channel that is dedicated for pull requests to separate requests for reviews from other development-related conversations.  If your team is consistently reviewing pull requests, a large limit should not be required.
-* `maxPages` - (optional - default `1`) the maximum number of pages of Slack history to fetch. Increase this if your channel is high-volume and PRs may fall outside a single page. When `trackUnresolved` is enabled, pagination stops early once the previous digest thread is found.
-* `trackUnresolved` - (optional - default `true`) when `true`, the bot persists unresolved PR message timestamps and the last digest thread timestamp to the state file between runs. This ensures long-running PRs are never dropped from the digest even if they scroll outside the pagination window. Requires the `state-file` action input and `contents: write` workflow permission.
-* `allowBotMessages` - (optional - default `true`) when `true`, messages posted by bots are eligible for PR tracking. Set to `false` to skip bot messages.
-* `disabled` - (optional - default `false`) if you wish to disable a channel without completely removing it, you can mark it as disabled.
-* `enableReactionCopying` - (optional - default `false`) when `true`, reactions from the original message are copied to the digest thread entry.
+Each channel configuration supports:
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `channelId` | yes | | The Slack channel ID. Right-click the channel → **Copy link** — the ID is the last segment of the URL. |
+| `limit` | no | `50` | Maximum messages to fetch per page of Slack history. |
+| `maxPages` | no | `1` | Maximum pages of history to fetch. Increase for high-volume channels where PRs may scroll off a single page. When `trackUnresolved` is enabled, pagination stops early once the previous digest thread is found. |
+| `trackUnresolved` | no | `true` | Persists unresolved PR message timestamps between runs so long-running PRs are never dropped from the digest. Requires `state-file` input and `contents: write` workflow permission. |
+| `allowBotMessages` | no | `true` | When `true`, messages posted by bots are eligible for PR tracking. Set to `false` to skip bot messages. |
+| `disabled` | no | `false` | Set to `true` to temporarily disable a channel without removing it from the config. |
+| `enableReactionCopying` | no | `false` | When `true`, reactions from the original message are copied to the digest thread entry. |
+
+## Advanced Usage
+
+### Persistent PR Tracking (`trackUnresolved`)
+
+By default (`trackUnresolved: true`), the bot persists the list of unresolved PR message timestamps and the last digest thread timestamp to a JSON state file after each run. On subsequent runs, it fetches any previously-tracked messages that fall outside the current pagination window — ensuring long-running PRs are never dropped from the digest.
+
+The state file is automatically committed and pushed back to the repository after each run (skipped if nothing changed).
+
+**Requirements:**
+
+- Set `contents: write` on the job permissions
+- Include `actions/checkout@v4` before the bot step
+- Provide the `state-file` input (defaults to `./pr-channel-state.json`)
+
+```yaml
+permissions:
+  contents: write
+```
+
+**To opt out**, set `trackUnresolved: false` on each channel in your config:
+
+```json
+{
+    "channels": {
+        "my-prs": {
+            "channelId": "C123456",
+            "trackUnresolved": false
+        }
+    }
+}
+```
+
+When disabled, you can also remove the `contents: write` permission and the `state-file` input from your workflow.
+
+### Reaction-Only Mode (`skip-digest`)
+
+Use `skip-digest: true` when you want the bot to mark merged/closed PRs with reactions without posting a new digest thread every time it runs.
+
+A common pattern is to post a full digest on a regular schedule and run reaction-only cleanup more frequently:
+
+```yaml
+name: PR Channel Slackbot
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip-digest:
+        description: 'Skip posting the open PR digest'
+        type: boolean
+        default: false
+  schedule:
+    # Full digest at 12:00 and 17:00 (UTC) every weekday
+    - cron: '0 12,17 * * 1-5'
+    # Reaction-only cleanup every hour during business hours
+    - cron: '0 9-17 * * 1-5'
+
+jobs:
+  pr-channel-slackbot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: PR Channel Slackbot
+        uses: TheSench/pr-channel-slackbot@v2
+        with:
+          slack-token: ${{ secrets.SLACK_TOKEN }}
+          github-token: ${{ secrets.PR_BOT_GITHUB_TOKEN }}
+          config-file: '.github/pr_channel_slackbot_config.json'
+          state-file: '.github/pr-channel-state.json'
+          skip-digest: ${{ github.event_name == 'schedule' && github.event.schedule == '0 9-17 * * 1-5' || inputs.skip-digest }}
+```
 
 ## Migrating from v1
 
