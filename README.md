@@ -324,8 +324,8 @@ on:
   schedule:
     # Full digest at 12:00 and 17:00 (UTC) every weekday
     - cron: '0 12,17 * * 1-5'
-    # Reaction-only cleanup every hour during business hours
-    - cron: '0 9-17 * * 1-5'
+    # Reaction-only cleanup every hour during business hours (except digest hours)
+    - cron: '0 9-11,13-16 * * 1-5'
 
 jobs:
   pr-channel-slackbot:
@@ -348,7 +348,7 @@ jobs:
           github-token: ${{ secrets.PR_BOT_GITHUB_TOKEN }}
           config-file: '.github/pr_channel_slackbot_config.json'
           state-file: '.github/pr-channel-state.json'
-          skip-digest: ${{ github.event_name == 'schedule' && github.event.schedule == '0 9-17 * * 1-5' || inputs.skip-digest }}
+          skip-digest: ${{ github.event_name == 'schedule' && github.event.schedule != '0 12,17 * * 1-5' || inputs.skip-digest }}
 
       - name: Commit state file
         run: |
