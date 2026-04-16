@@ -71,8 +71,7 @@ describe('run()', () => {
 
       await run();
 
-      const [, savedState] = saveState.mock.calls[0];
-      expect(savedState).not.toHaveProperty('C123');
+      expect(saveState).not.toHaveBeenCalled();
     });
   });
 

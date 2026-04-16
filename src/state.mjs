@@ -9,7 +9,7 @@ import { spawnSync } from 'child_process';
 
 /**
  * Run a git command, throwing if it exits non-zero or fails to spawn.
- * @param {string[]} args
+ * @param {...string} args
  */
 function git(...args) {
   const result = spawnSync('git', args, { stdio: 'inherit' });

@@ -42423,7 +42423,9 @@ async function run() {
       }
     }
 
-    (0,_state_mjs__WEBPACK_IMPORTED_MODULE_4__/* .saveState */ .zL)(stateFile, state);
+    if (channelConfig.some(c => c.trackUnresolved)) {
+      (0,_state_mjs__WEBPACK_IMPORTED_MODULE_4__/* .saveState */ .zL)(stateFile, state);
+    }
   } catch (error) {
     console.error(error);
     (0,_actions_core__WEBPACK_IMPORTED_MODULE_0__.setFailed)(error.message);
@@ -42587,7 +42589,7 @@ const external_child_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(
 
 /**
  * Run a git command, throwing if it exits non-zero or fails to spawn.
- * @param {string[]} args
+ * @param {...string} args
  */
 function git(...args) {
   const result = (0,external_child_process_namespaceObject.spawnSync)('git', args, { stdio: 'inherit' });
@@ -42748,19 +42750,6 @@ function getConfig() {
 }
 
 /**
- * Build the unified message set for a channel from two sources:
- * 1. Paginated Slack history back to the last digest thread (or maxPages pages).
- * 2. Individually-fetched messages for previously-tracked unresolved timestamps
- *    not already present in the paginated results (only when trackUnresolved is true).
- *
- * @param {string} channelId
- * @param {import('./state.mjs').ChannelState} channelState
- * @param {number} limit Messages per page
- * @param {number} maxPages Maximum pages to fetch
- * @param {boolean} trackUnresolved Whether to fetch individually-tracked messages
- * @returns {Promise<SlackMessage[]>} Deduplicated messages sorted ascending by ts
- */
-/**
  * Paginate channel history back to the last digest thread (or maxPages pages).
  * Returns all fetched messages and the subset posted after the digest anchor.
  *
@@ -42823,6 +42812,19 @@ async function fetchTrackedMessages(channelId, trackedTimestamps, alreadyFetched
   return messages;
 }
 
+/**
+ * Build the unified message set for a channel from two sources:
+ * 1. Paginated Slack history back to the last digest thread (or maxPages pages).
+ * 2. Individually-fetched messages for previously-tracked unresolved timestamps
+ *    not already present in the paginated results (only when trackUnresolved is true).
+ *
+ * @param {string} channelId
+ * @param {import('./state.mjs').ChannelState} channelState
+ * @param {number} limit Messages per page
+ * @param {number} maxPages Maximum pages to fetch
+ * @param {boolean} trackUnresolved Whether to fetch individually-tracked messages
+ * @returns {Promise<SlackMessage[]>} Deduplicated messages sorted ascending by ts
+ */
 async function collectMessages(channelId, channelState, limit, maxPages, trackUnresolved) {
   const { lastDigestThreadTimestamp, unresolvedMessageTimestamps } = channelState;
 

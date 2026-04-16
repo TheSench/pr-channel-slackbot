@@ -54,7 +54,9 @@ export async function run() {
       }
     }
 
-    saveState(stateFile, state);
+    if (channelConfig.some(c => c.trackUnresolved)) {
+      saveState(stateFile, state);
+    }
   } catch (error) {
     console.error(error);
     setFailed(error.message);
