@@ -112,7 +112,7 @@ jobs:
   pr-channel-slackbot:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Required when trackUnresolved is enabled (commits state file)
+      contents: write  # Required when any channel has trackUnresolved: true
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -123,9 +123,23 @@ jobs:
           slack-token: ${{ secrets.SLACK_TOKEN }}
           github-token: ${{ secrets.PR_BOT_GITHUB_TOKEN }}
           config-file: '.github/pr_channel_slackbot_config.json'
-          # skip-digest: true    # Uncomment to skip posting the open PR digest thread
-          # state-file: '.github/pr-channel-state.json'  # Customize state file location
+          state-file: '.github/pr-channel-state.json'
 ```
+
+With a matching config that enables `trackUnresolved` on a channel:
+
+```json
+{
+    "channels": {
+        "my-prs": {
+            "channelId": "C123456",
+            "trackUnresolved": true
+        }
+    }
+}
+```
+
+When `trackUnresolved` is enabled, the bot commits the updated state file back to the repository after each run (skipped if nothing changed), so previously-tracked unresolved PRs are carried forward even if they scroll outside the pagination window.
 
 ## Action Inputs
 
@@ -173,6 +187,8 @@ on:
 jobs:
   pr-channel-slackbot:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required when any channel has trackUnresolved: true
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -183,6 +199,7 @@ jobs:
           slack-token: ${{ secrets.SLACK_TOKEN }}
           github-token: ${{ secrets.PR_BOT_GITHUB_TOKEN }}
           config-file: '.github/pr_channel_slackbot_config.json'
+          state-file: '.github/pr-channel-state.json'
           skip-digest: ${{ github.event_name == 'schedule' && github.event.schedule == '0 9-17 * * 1-5' || inputs.skip-digest }}
 ```
 
