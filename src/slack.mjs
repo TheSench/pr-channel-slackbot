@@ -59,17 +59,30 @@ export function addReaction(channelId, messageTs, reaction) {
 }
 
 /**
- * Fetch all reply messages in a thread.
+ * Fetch all reply messages in a thread, handling Slack pagination.
  * @param {string} channelId
  * @param {string} threadTs
  * @returns {Promise<SlackMessage[]>}
  */
 export async function getThreadReplies(channelId, threadTs) {
-  const response = await slackClient().conversations.replies({
-    channel: channelId,
-    ts: threadTs
-  });
-  return response.messages ?? [];
+  /** @type {SlackMessage[]} */
+  const messages = [];
+  let cursor = undefined;
+
+  while (true) {
+    const response = await slackClient().conversations.replies({
+      channel: channelId,
+      ts: threadTs,
+      cursor
+    });
+
+    messages.push(...(response.messages ?? []));
+
+    cursor = response.response_metadata?.next_cursor || undefined;
+    if (!cursor) break;
+  }
+
+  return messages;
 }
 
 export function getPermalink(channelId, messageTs) {
