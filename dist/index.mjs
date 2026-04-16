@@ -37329,13 +37329,6 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("assert");
 
 /***/ }),
 
-/***/ 5317:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("child_process");
-
-/***/ }),
-
 /***/ 6982:
 /***/ ((module) => {
 
@@ -42597,7 +42590,7 @@ module.exports = axios;
 
 /***/ }),
 
-/***/ 4116:
+/***/ 8179:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
 
@@ -44046,8 +44039,8 @@ function toPlatformPath(pth) {
 var external_string_decoder_ = __nccwpck_require__(3193);
 // EXTERNAL MODULE: external "events"
 var external_events_ = __nccwpck_require__(4434);
-// EXTERNAL MODULE: external "child_process"
-var external_child_process_ = __nccwpck_require__(5317);
+;// CONCATENATED MODULE: external "child_process"
+const external_child_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("child_process");
 // EXTERNAL MODULE: external "assert"
 var external_assert_ = __nccwpck_require__(2613);
 ;// CONCATENATED MODULE: ./node_modules/@actions/io/lib/io-util.js
@@ -44889,7 +44882,7 @@ class ToolRunner extends external_events_.EventEmitter {
                     return reject(new Error(`The cwd: ${this.options.cwd} does not exist!`));
                 }
                 const fileName = this._getSpawnFileName();
-                const cp = external_child_process_.spawn(fileName, this._getSpawnArgs(optionsNonNull), this._getSpawnOptions(this.options, fileName));
+                const cp = external_child_process_namespaceObject.spawn(fileName, this._getSpawnArgs(optionsNonNull), this._getSpawnOptions(this.options, fileName));
                 let stdbuffer = '';
                 if (cp.stdout) {
                     cp.stdout.on('data', (data) => {
@@ -45569,8 +45562,8 @@ __nccwpck_require__.d(__webpack_exports__, {
   BY: () => (/* binding */ getReviewReactions)
 });
 
-// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js + 15 modules
-var core = __nccwpck_require__(4116);
+// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js + 16 modules
+var core = __nccwpck_require__(8179);
 // EXTERNAL MODULE: external "fs"
 var external_fs_ = __nccwpck_require__(9896);
 // EXTERNAL MODULE: external "os"
@@ -50008,7 +50001,7 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
 /* harmony export */   e: () => (/* binding */ run)
 /* harmony export */ });
-/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(4116);
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(8179);
 /* harmony import */ var _workflow_mjs__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(9849);
 /* harmony import */ var _slack_mjs__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(165);
 /* harmony import */ var _github_mjs__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(2474);
@@ -50109,7 +50102,7 @@ __webpack_async_result__();
 /* harmony export */   Zg: () => (/* binding */ getThreadReplies),
 /* harmony export */   iu: () => (/* binding */ getPermalink)
 /* harmony export */ });
-/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(4116);
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(8179);
 /* harmony import */ var _slack_web_api__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(5105);
 
 
@@ -50267,8 +50260,6 @@ async function markThreadSuperseded(channelId, oldThreadTs, newThreadTs) {
 /* harmony export */   LZ: () => (/* binding */ saveState)
 /* harmony export */ });
 /* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(9896);
-/* harmony import */ var child_process__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(5317);
-
 
 
 /**
@@ -50276,18 +50267,6 @@ async function markThreadSuperseded(channelId, oldThreadTs, newThreadTs) {
  * @property {Array<string>} unresolvedMessageTimestamps
  * @property {string|null} lastDigestThreadTimestamp
  */
-
-/**
- * Run a git command, throwing if it exits non-zero or fails to spawn.
- * @param {...string} args
- */
-function git(...args) {
-  const result = (0,child_process__WEBPACK_IMPORTED_MODULE_1__.spawnSync)('git', args, { stdio: 'inherit' });
-  if (result.error || result.status !== 0) {
-    const detail = result.error ? result.error.message : `exit status ${result.status}`;
-    throw new Error(`git ${args.join(' ')} failed: ${detail}`);
-  }
-}
 
 /**
  * Load state from the state file.
@@ -50317,27 +50296,13 @@ function getChannelState(state, channelId) {
 }
 
 /**
- * Write state to disk and commit it to the repo.
- * Skips the commit if the file has not changed.
- * Throws if git operations fail (caller should handle via setFailed).
+ * Write state to disk.
  * @param {string} stateFile
  * @param {Object.<string, ChannelState>} state
  */
 function saveState(stateFile, state) {
+  console.log(`Writing state changes to ${stateFile}`);
   fs__WEBPACK_IMPORTED_MODULE_0__.writeFileSync(stateFile, JSON.stringify(state, null, 2));
-  git('add', stateFile);
-  const diff = (0,child_process__WEBPACK_IMPORTED_MODULE_1__.spawnSync)('git', ['diff', '--cached', '--exit-code', '--', stateFile], { stdio: 'ignore' });
-  if (diff.error) throw new Error(`git diff failed: ${diff.error.message}`);
-  if (diff.status === 0) {
-    console.info('No changes to state file, skipping commit.');
-    return;
-  }
-  git('commit', '-m', 'chore: update PR channel state [skip ci]');
-  const refName = process.env.GITHUB_REF_NAME;
-  if (!refName) {
-    throw new Error('GITHUB_REF_NAME is not set; cannot push state file');
-  }
-  git('push', 'origin', `HEAD:refs/heads/${refName}`);
 }
 
 
@@ -50357,8 +50322,8 @@ __nccwpck_require__.d(__webpack_exports__, {
   Vb: () => (/* binding */ shouldProcess)
 });
 
-// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js + 15 modules
-var core = __nccwpck_require__(4116);
+// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js + 16 modules
+var core = __nccwpck_require__(8179);
 // EXTERNAL MODULE: external "fs"
 var external_fs_ = __nccwpck_require__(9896);
 // EXTERNAL MODULE: ./src/github.mjs + 22 modules
