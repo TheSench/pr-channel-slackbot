@@ -94,7 +94,7 @@ jobs:
       contents: write  # Allows the default GITHUB_TOKEN to commit the state file
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4  # Required to read the config file and write the state file
+        uses: actions/checkout@v6  # Required to read the config file and write the state file
 
       - name: Configure git user
         run: |
