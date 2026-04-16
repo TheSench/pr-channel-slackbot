@@ -39,5 +39,6 @@ export function getChannelState(state, channelId) {
  * @param {Object.<string, ChannelState>} state
  */
 export function saveState(stateFile, state) {
+  console.log(`Writing state changes to ${stateFile}`);
   fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
 }

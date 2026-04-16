@@ -50301,6 +50301,7 @@ function getChannelState(state, channelId) {
  * @param {Object.<string, ChannelState>} state
  */
 function saveState(stateFile, state) {
+  console.log(`Writing state changes to ${stateFile}`);
   fs__WEBPACK_IMPORTED_MODULE_0__.writeFileSync(stateFile, JSON.stringify(state, null, 2));
 }
 
