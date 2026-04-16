@@ -42366,6 +42366,8 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var _workflow_mjs__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(6097);
 /* harmony import */ var _slack_mjs__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(8223);
 /* harmony import */ var _github_mjs__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(4852);
+/* harmony import */ var _state_mjs__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(8354);
+
 
 
 
@@ -42375,12 +42377,21 @@ async function run() {
   try {
     const { reactionConfig, channelConfig } = (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .getConfig */ .iE)();
     const skipDigest = (0,_actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput)('skip-digest');
-    for (let { channelId, limit, disableReactionCopying } of channelConfig) {
-      const messagesForChannel = [];
-      for (let message of await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .getMessages */ ._U)(channelId, limit)) {
+    const stateFile = (0,_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput)('state-file');
+
+    const state = (0,_state_mjs__WEBPACK_IMPORTED_MODULE_4__/* .loadState */ .jw)(stateFile);
+
+    for (let { channelId, limit, maxPages, trackUnresolved, disableReactionCopying, allowBotMessages } of channelConfig) {
+      const channelState = (0,_state_mjs__WEBPACK_IMPORTED_MODULE_4__/* .getChannelState */ .iJ)(state, channelId);
+      const messages = await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .collectMessages */ .$I)(channelId, channelState, limit, maxPages, trackUnresolved);
+
+      const messagesForDigest = [];
+      const unresolvedTimestamps = [];
+
+      for (let message of messages) {
         const pullRequests = (0,_github_mjs__WEBPACK_IMPORTED_MODULE_3__/* .extractPullRequests */ .Nd)(message.text);
 
-        if (!(0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .shouldProcess */ .VM)(message, pullRequests, reactionConfig)) {
+        if (!(0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .shouldProcess */ .VM)(message, pullRequests, reactionConfig, allowBotMessages)) {
           continue;
         }
 
@@ -42391,15 +42402,29 @@ async function run() {
           continue;
         }
 
+        unresolvedTimestamps.push(message.ts);
+
         if (!skipDigest) {
-          messagesForChannel.push(
+          messagesForDigest.push(
             await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .buildPrMessage */ .wB)(channelId, message, pullRequests[0], reactionConfig, disableReactionCopying)
           );
         }
       }
-      if (!skipDigest) {
-        await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .JZ)(channelId, messagesForChannel);
+
+      const digestThreadTimestamp = (skipDigest
+        ? channelState.lastDigestThreadTimestamp
+        : await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .JZ)(channelId, messagesForDigest));
+
+      if (trackUnresolved) {
+        state[channelId] = {
+          unresolvedMessageTimestamps: unresolvedTimestamps,
+          lastDigestThreadTimestamp: digestThreadTimestamp
+        };
       }
+    }
+
+    if (channelConfig.some(c => c.trackUnresolved)) {
+      (0,_state_mjs__WEBPACK_IMPORTED_MODULE_4__/* .saveState */ .zL)(stateFile, state);
     }
   } catch (error) {
     console.error(error);
@@ -42418,8 +42443,9 @@ __webpack_async_result__();
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   "D2": () => (/* binding */ getMessageByTimestamp),
 /* harmony export */   "JZ": () => (/* binding */ postOpenPrs),
-/* harmony export */   "_U": () => (/* binding */ getMessages),
+/* harmony export */   "OT": () => (/* binding */ getMessagePage),
 /* harmony export */   "rU": () => (/* binding */ addReaction),
 /* harmony export */   "t5": () => (/* binding */ getPermalink)
 /* harmony export */ });
@@ -42441,19 +42467,40 @@ function slackClient() {
 }
 
 /**
- * Get the last {limit} messages from {channelId} in ascending order.
- * 
+ * Fetch a single page of messages from {channelId}.
  * @param {string} channelId
  * @param {number} limit
+ * @param {string} [cursor]
+ * @returns {Promise<{messages: SlackMessage[], nextCursor: string|null}>}
  */
-async function getMessages(channelId, limit) {
-  const history = await slackClient().conversations.history({
+async function getMessagePage(channelId, limit, cursor = undefined) {
+  const response = await slackClient().conversations.history({
     channel: channelId,
-    limit
+    limit,
+    cursor
   });
-  console.info(`Processing ${history.messages?.length ?? 0} messages`);
-  return (history.messages ?? [])
-    .sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
+  return {
+    messages: response.messages ?? [],
+    nextCursor: response.response_metadata?.next_cursor || null
+  };
+}
+
+/**
+ * Fetch a single message by its timestamp.
+ * Returns null if the message does not exist (deleted).
+ * @param {string} channelId
+ * @param {string} ts
+ * @returns {Promise<SlackMessage|null>}
+ */
+async function getMessageByTimestamp(channelId, ts) {
+  const response = await slackClient().conversations.history({
+    channel: channelId,
+    oldest: ts,
+    latest: ts,
+    inclusive: true,
+    limit: 1
+  });
+  return response.messages?.[0] ?? null;
 }
 
 function addReaction(channelId, messageTs, reaction) {
@@ -42473,7 +42520,7 @@ function getPermalink(channelId, messageTs) {
 
 async function postOpenPrs(channelId, messages) {
   const headerResponse = await postThreadHeader(channelId, messages.length);
-  if (messages.length === 0) return;
+  if (messages.length === 0) return headerResponse.ts;
 
   for (let message of messages) {
     const prMessage = await postPrMessage(channelId, headerResponse.ts, message);
@@ -42481,6 +42528,7 @@ async function postOpenPrs(channelId, messages) {
       await addReaction(channelId, prMessage.ts, reaction);
     }
   }
+  return headerResponse.ts;
 }
 
 async function postThreadHeader(channelId, prCount) {
@@ -42514,6 +42562,97 @@ async function postPrMessage(channelId, threadId, message) {
 
 /***/ }),
 
+/***/ 8354:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+
+// EXPORTS
+__nccwpck_require__.d(__webpack_exports__, {
+  "iJ": () => (/* binding */ getChannelState),
+  "jw": () => (/* binding */ loadState),
+  "zL": () => (/* binding */ saveState)
+});
+
+// EXTERNAL MODULE: external "fs"
+var external_fs_ = __nccwpck_require__(7147);
+;// CONCATENATED MODULE: external "child_process"
+const external_child_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("child_process");
+;// CONCATENATED MODULE: ./src/state.mjs
+
+
+
+/**
+ * @typedef {Object} ChannelState
+ * @property {Array<string>} unresolvedMessageTimestamps
+ * @property {string|null} lastDigestThreadTimestamp
+ */
+
+/**
+ * Run a git command, throwing if it exits non-zero or fails to spawn.
+ * @param {...string} args
+ */
+function git(...args) {
+  const result = (0,external_child_process_namespaceObject.spawnSync)('git', args, { stdio: 'inherit' });
+  if (result.error || result.status !== 0) {
+    const detail = result.error ? result.error.message : `exit status ${result.status}`;
+    throw new Error(`git ${args.join(' ')} failed: ${detail}`);
+  }
+}
+
+/**
+ * Load state from the state file.
+ * Returns {} if the file does not exist (clean first run).
+ * @param {string} stateFile
+ * @returns {Object.<string, ChannelState>}
+ */
+function loadState(stateFile) {
+  if (!external_fs_.existsSync(stateFile)) {
+    return {};
+  }
+  return JSON.parse(external_fs_.readFileSync(stateFile, 'utf-8'));
+}
+
+/**
+ * Get the state for a channel with defaults applied.
+ * @param {Object.<string, ChannelState>} state
+ * @param {string} channelId
+ * @returns {ChannelState}
+ */
+function getChannelState(state, channelId) {
+  return {
+    unresolvedMessageTimestamps: [],
+    lastDigestThreadTimestamp: null,
+    ...(state[channelId] ?? {})
+  };
+}
+
+/**
+ * Write state to disk and commit it to the repo.
+ * Skips the commit if the file has not changed.
+ * Throws if git operations fail (caller should handle via setFailed).
+ * @param {string} stateFile
+ * @param {Object.<string, ChannelState>} state
+ */
+function saveState(stateFile, state) {
+  external_fs_.writeFileSync(stateFile, JSON.stringify(state, null, 2));
+  git('add', stateFile);
+  const diff = (0,external_child_process_namespaceObject.spawnSync)('git', ['diff', '--cached', '--exit-code', '--', stateFile], { stdio: 'ignore' });
+  if (diff.error) throw new Error(`git diff failed: ${diff.error.message}`);
+  if (diff.status === 0) {
+    console.info('No changes to state file, skipping commit.');
+    return;
+  }
+  git('commit', '-m', 'chore: update PR channel state [skip ci]');
+  const refName = process.env.GITHUB_REF_NAME;
+  if (!refName) {
+    throw new Error('GITHUB_REF_NAME is not set; cannot push state file');
+  }
+  git('push', 'origin', `HEAD:refs/heads/${refName}`);
+}
+
+
+/***/ }),
+
 /***/ 6097:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
@@ -42521,6 +42660,7 @@ async function postPrMessage(channelId, threadId, message) {
 // EXPORTS
 __nccwpck_require__.d(__webpack_exports__, {
   "wB": () => (/* binding */ buildPrMessage),
+  "$I": () => (/* binding */ collectMessages),
   "di": () => (/* binding */ getAggregateStatus),
   "iE": () => (/* binding */ getConfig),
   "VM": () => (/* binding */ shouldProcess)
@@ -42565,7 +42705,10 @@ function distinct(array) {
  * @typedef {Object} ChannelConfig
  * @property {string} channelId
  * @property {number} limit
+ * @property {number} maxPages
+ * @property {boolean} trackUnresolved
  * @property {boolean} disableReactionCopying
+ * @property {boolean} allowBotMessages
  */
 /**
  * @typedef {Object} PrMessage
@@ -42593,7 +42736,10 @@ function getConfig() {
     .map(it => ({
       ...it,
       limit: it.limit ?? 50,
-      disableReactionCopying: it.disableReactionCopying ?? false
+      maxPages: it.maxPages ?? 1,
+      trackUnresolved: it.trackUnresolved ?? false,
+      disableReactionCopying: it.disableReactionCopying ?? false,
+      allowBotMessages: it.allowBotMessages ?? false
     }))
     .filter(it => it.channelId && !it.disabled);
 
@@ -42601,6 +42747,100 @@ function getConfig() {
     reactionConfig,
     channelConfig
   };
+}
+
+/**
+ * Paginate channel history back to the last digest thread (or maxPages pages).
+ * Returns all fetched messages and the subset posted after the digest anchor.
+ *
+ * @param {string} channelId
+ * @param {number} limit Messages per page
+ * @param {number} maxPages Maximum pages to fetch
+ * @param {string|null} lastDigestThreadTimestamp Stop paginating when this ts is found
+ * @returns {Promise<{allMessages: SlackMessage[], postDigestMessages: SlackMessage[]}>}
+ */
+async function fetchPagedMessages(channelId, limit, maxPages, lastDigestThreadTimestamp) {
+  const allMessages = [];
+  let cursor = undefined;
+  let digestFound = false;
+
+  for (let page = 0; page < maxPages; page++) {
+    const { messages, nextCursor } = await (0,slack/* getMessagePage */.OT)(channelId, limit, cursor);
+    allMessages.push(...messages);
+
+    if (lastDigestThreadTimestamp && messages.some(m => m.ts === lastDigestThreadTimestamp)) {
+      digestFound = true;
+      break;
+    }
+
+    if (!nextCursor) break;
+    cursor = nextCursor;
+  }
+
+  if (lastDigestThreadTimestamp && !digestFound) {
+    console.warn(`Reached maxPages (${maxPages}) without finding last digest anchor for channel ${channelId}. Some messages may be missed. Consider increasing maxPages.`);
+  }
+
+  console.info(`Fetched ${allMessages.length} messages across pages`);
+
+  const postDigestMessages = lastDigestThreadTimestamp
+    ? allMessages.filter(m => parseFloat(m.ts) > parseFloat(lastDigestThreadTimestamp))
+    : [...allMessages];
+
+  return { allMessages, postDigestMessages };
+}
+
+/**
+ * Fetch previously-tracked unresolved messages that are not already in the fetched set.
+ * Skips any ts present in alreadyFetchedTs (message already retrieved via pagination).
+ * Skips any ts whose message has been deleted.
+ *
+ * @param {string} channelId
+ * @param {Array<string>} trackedTimestamps ts values from prior run state
+ * @param {Set<string>} alreadyFetchedTs ts values already retrieved in Source 1
+ * @returns {Promise<SlackMessage[]>}
+ */
+async function fetchTrackedMessages(channelId, trackedTimestamps, alreadyFetchedTs) {
+  const messages = [];
+  for (const ts of trackedTimestamps) {
+    if (alreadyFetchedTs.has(ts)) continue;
+    const message = await (0,slack/* getMessageByTimestamp */.D2)(channelId, ts);
+    if (message) {
+      messages.push(message);
+    }
+  }
+  return messages;
+}
+
+/**
+ * Build the unified message set for a channel from two sources:
+ * 1. Paginated Slack history back to the last digest thread (or maxPages pages).
+ * 2. Individually-fetched messages for previously-tracked unresolved timestamps
+ *    not already present in the paginated results (only when trackUnresolved is true).
+ *
+ * @param {string} channelId
+ * @param {import('./state.mjs').ChannelState} channelState
+ * @param {number} limit Messages per page
+ * @param {number} maxPages Maximum pages to fetch
+ * @param {boolean} trackUnresolved Whether to fetch individually-tracked messages
+ * @returns {Promise<SlackMessage[]>} Deduplicated messages sorted ascending by ts
+ */
+async function collectMessages(channelId, channelState, limit, maxPages, trackUnresolved) {
+  const { lastDigestThreadTimestamp, unresolvedMessageTimestamps } = channelState;
+
+  const { allMessages, postDigestMessages } = await fetchPagedMessages(
+    channelId, limit, maxPages, trackUnresolved ? lastDigestThreadTimestamp : null
+  );
+
+  const trackedMessages = trackUnresolved
+    ? await fetchTrackedMessages(channelId, unresolvedMessageTimestamps, new Set(allMessages.map(m => m.ts)))
+    : [];
+
+  const result = [...postDigestMessages, ...trackedMessages]
+    .sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
+
+  console.info(`Processing ${result.length} messages`);
+  return result;
 }
 
 async function getAggregateStatus(pullRequests) {
@@ -42621,8 +42861,9 @@ async function getAggregateStatus(pullRequests) {
  * @param {SlackMessage} message
  * @param {Array<PullRequest>} pullRequests
  * @param {ReactionConfig} reactionConfig
+ * @param {boolean} allowBotMessages
  */
-function shouldProcess(message, pullRequests, reactionConfig) {
+function shouldProcess(message, pullRequests, reactionConfig, allowBotMessages = false) {
   if (pullRequests.length === 0) {
     console.debug(`SKIPPING: ${message.ts} has no pull requests`);
     return false;
@@ -42630,7 +42871,7 @@ function shouldProcess(message, pullRequests, reactionConfig) {
     console.warn(`WARNING: ${message.ts} has multiple pull requests`);
   }
 
-  if (message.bot_id) {
+  if (!allowBotMessages && message.bot_id) {
     console.debug(`SKIPPING: ${message.ts} is a bot message`);
     return false;
   }
@@ -42641,10 +42882,6 @@ function shouldProcess(message, pullRequests, reactionConfig) {
   }
 
   console.debug(`PROCESSING: ${message.ts}`);
-  if (pullRequests.length > 1) {
-    console.warn(`WARNING: ${message.ts} has multiple pull requests`);
-  }
-
   return true;
 }
 

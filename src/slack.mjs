@@ -14,19 +14,40 @@ function slackClient() {
 }
 
 /**
- * Get the last {limit} messages from {channelId} in ascending order.
- * 
+ * Fetch a single page of messages from {channelId}.
  * @param {string} channelId
  * @param {number} limit
+ * @param {string} [cursor]
+ * @returns {Promise<{messages: SlackMessage[], nextCursor: string|null}>}
  */
-export async function getMessages(channelId, limit) {
-  const history = await slackClient().conversations.history({
+export async function getMessagePage(channelId, limit, cursor = undefined) {
+  const response = await slackClient().conversations.history({
     channel: channelId,
-    limit
+    limit,
+    cursor
   });
-  console.info(`Processing ${history.messages?.length ?? 0} messages`);
-  return (history.messages ?? [])
-    .sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
+  return {
+    messages: response.messages ?? [],
+    nextCursor: response.response_metadata?.next_cursor || null
+  };
+}
+
+/**
+ * Fetch a single message by its timestamp.
+ * Returns null if the message does not exist (deleted).
+ * @param {string} channelId
+ * @param {string} ts
+ * @returns {Promise<SlackMessage|null>}
+ */
+export async function getMessageByTimestamp(channelId, ts) {
+  const response = await slackClient().conversations.history({
+    channel: channelId,
+    oldest: ts,
+    latest: ts,
+    inclusive: true,
+    limit: 1
+  });
+  return response.messages?.[0] ?? null;
 }
 
 export function addReaction(channelId, messageTs, reaction) {
@@ -46,7 +67,7 @@ export function getPermalink(channelId, messageTs) {
 
 export async function postOpenPrs(channelId, messages) {
   const headerResponse = await postThreadHeader(channelId, messages.length);
-  if (messages.length === 0) return;
+  if (messages.length === 0) return headerResponse.ts;
 
   for (let message of messages) {
     const prMessage = await postPrMessage(channelId, headerResponse.ts, message);
@@ -54,6 +75,7 @@ export async function postOpenPrs(channelId, messages) {
       await addReaction(channelId, prMessage.ts, reaction);
     }
   }
+  return headerResponse.ts;
 }
 
 async function postThreadHeader(channelId, prCount) {
