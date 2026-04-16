@@ -9,6 +9,9 @@ jobs:
   ci:
     name: CI
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +23,18 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-      
+
+      - name: Run tests
+        run: npm test -- --reporter=verbose --reporter=junit --outputFile=test-results.xml
+
+      - name: Publish test report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Test Results
+          path: test-results.xml
+          reporter: java-junit
+
       - name: Run build
         run: npm run build
 
