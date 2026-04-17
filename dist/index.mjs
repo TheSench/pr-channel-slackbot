@@ -49999,7 +49999,9 @@ async function getReviewReactions(pullRequest, reactionConfig) {
 
 __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   e: () => (/* binding */ run)
+/* harmony export */   U4: () => (/* binding */ isNewer),
+/* harmony export */   eF: () => (/* binding */ run),
+/* harmony export */   y2: () => (/* binding */ getLatestDigestThreadTimestamp)
 /* harmony export */ });
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(8179);
 /* harmony import */ var _workflow_mjs__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(9849);
@@ -50012,6 +50014,27 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 
 
 
+function isNewer(messageTs, digestThreadTimestamp) {
+  if (!digestThreadTimestamp) {
+    return true;
+  }
+
+  const currentTs = Number(messageTs);
+  const previousTs = Number(digestThreadTimestamp);
+
+  return Number.isFinite(currentTs) && Number.isFinite(previousTs) && currentTs > previousTs;
+}
+
+function getLatestDigestThreadTimestamp(channelState, botIdentity, messages) {
+  let digestThreadTimestamp = channelState.lastDigestThreadTimestamp;
+  for (let message of messages) {
+    if ((0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .isDigest */ .Bc)(message, botIdentity) && isNewer(message.ts, digestThreadTimestamp)) {
+      digestThreadTimestamp = message.ts;
+    }
+  }
+  return digestThreadTimestamp;
+}
+
 async function run() {
   try {
     const { reactionConfig, channelConfig } = (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .getConfig */ .zj)();
@@ -50019,11 +50042,13 @@ async function run() {
     const stateFile = (0,_actions_core__WEBPACK_IMPORTED_MODULE_0__/* .getInput */ .V4)('state-file');
 
     const state = (0,_state_mjs__WEBPACK_IMPORTED_MODULE_4__/* .loadState */ .C7)(stateFile);
+    const botIdentity = await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .getBotIdentity */ .E_)();
 
     for (let { channelId, limit, maxPages, trackUnresolved, enableReactionCopying, allowBotMessages } of channelConfig) {
       const channelState = (0,_state_mjs__WEBPACK_IMPORTED_MODULE_4__/* .getChannelState */ .F7)(state, channelId);
       const messages = await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .collectMessages */ .ZO)(channelId, channelState, limit, maxPages, trackUnresolved);
-      const digestThreadMap = await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .buildDigestThreadMap */ .tT)(channelId, channelState.lastDigestThreadTimestamp);
+      let lastDigestThreadTimestamp = getLatestDigestThreadTimestamp(channelState, botIdentity, messages);
+      const digestThreadMap = await (0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .buildDigestThreadMap */ .tT)(channelId, lastDigestThreadTimestamp);
 
       const messagesForDigest = [];
       const unresolvedTimestamps = [];
@@ -50056,20 +50081,17 @@ async function run() {
         }
       }
 
-      let digestThreadTimestamp;
-      if (skipDigest) {
-        digestThreadTimestamp = channelState.lastDigestThreadTimestamp;
-      } else {
-        digestThreadTimestamp = await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .Ek)(channelId, messagesForDigest);
+      if (!skipDigest) {
+        lastDigestThreadTimestamp = await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .postOpenPrs */ .Ek)(channelId, messagesForDigest);
         if (channelState.lastDigestThreadTimestamp) {
-          await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .markThreadSuperseded */ .Sg)(channelId, channelState.lastDigestThreadTimestamp, digestThreadTimestamp);
+          await (0,_slack_mjs__WEBPACK_IMPORTED_MODULE_2__/* .markThreadSuperseded */ .Sg)(channelId, channelState.lastDigestThreadTimestamp, lastDigestThreadTimestamp);
         }
       }
 
       if (trackUnresolved) {
         state[channelId] = {
           unresolvedMessageTimestamps: unresolvedTimestamps,
-          lastDigestThreadTimestamp: digestThreadTimestamp
+          lastDigestThreadTimestamp
         };
       }
     }
@@ -50095,13 +50117,16 @@ __webpack_async_result__();
 
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
 /* harmony export */   BB: () => (/* binding */ addReaction),
+/* harmony export */   Bc: () => (/* binding */ isDigest),
 /* harmony export */   Dh: () => (/* binding */ getMessagePage),
+/* harmony export */   E_: () => (/* binding */ getBotIdentity),
 /* harmony export */   Ek: () => (/* binding */ postOpenPrs),
 /* harmony export */   Ld: () => (/* binding */ getMessageByTimestamp),
 /* harmony export */   Sg: () => (/* binding */ markThreadSuperseded),
 /* harmony export */   Zg: () => (/* binding */ getThreadReplies),
 /* harmony export */   iu: () => (/* binding */ getPermalink)
 /* harmony export */ });
+/* unused harmony export isOwnMessage */
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(8179);
 /* harmony import */ var _slack_web_api__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(5105);
 
@@ -50191,11 +50216,40 @@ async function getThreadReplies(channelId, threadTs) {
   return messages;
 }
 
+const DIGEST_HEADER_RESOLVED = 'All PRs are resolved! :tada:';
+const DIGEST_HEADER_OPEN = 'The following PRs are still open :thread:';
+
+const DIGEST_HEADER_TEXTS = [
+  DIGEST_HEADER_RESOLVED,
+  DIGEST_HEADER_OPEN
+];
+
 function getPermalink(channelId, messageTs) {
   return slackClient().chat.getPermalink({
     channel: channelId,
     message_ts: messageTs
   }).then(response => response.permalink);
+}
+
+function isDigest(message, identity) {
+  const text = message.text;
+  const headerBlockText = message.blocks?.find(block => block.type === 'header')?.text?.text;
+
+  return isOwnMessage(message, identity) && (
+    DIGEST_HEADER_TEXTS.includes(text) || DIGEST_HEADER_TEXTS.includes(headerBlockText)
+  );
+}
+
+async function getBotIdentity() {
+  const response = await slackClient().auth.test();
+  return {
+    userId: response.user_id,
+    botId: response.bot_id
+  };
+}
+
+function isOwnMessage(message, identity) {
+  return (identity.botId && message.bot_id === identity.botId) || message.user === identity.userId;
 }
 
 async function postOpenPrs(channelId, messages) {
@@ -50213,8 +50267,8 @@ async function postOpenPrs(channelId, messages) {
 
 async function postThreadHeader(channelId, prCount) {
   const header = (prCount === 0
-    ? 'All PRs are resolved! :tada:'
-    : 'The following PRs are still open :thread:');
+    ? DIGEST_HEADER_RESOLVED
+    : DIGEST_HEADER_OPEN);
   return slackClient().chat.postMessage({
     channel: channelId,
     text: header,
@@ -50764,6 +50818,8 @@ module.exports = /*#__PURE__*/JSON.parse('{"application/1d-interleaved-parityfec
 /******/ // This entry module used 'module' so it can't be inlined
 /******/ var __webpack_exports__ = __nccwpck_require__(9465);
 /******/ __webpack_exports__ = await __webpack_exports__;
-/******/ var __webpack_exports__run = __webpack_exports__.e;
-/******/ export { __webpack_exports__run as run };
+/******/ var __webpack_exports__getLatestDigestThreadTimestamp = __webpack_exports__.y2;
+/******/ var __webpack_exports__isNewer = __webpack_exports__.U4;
+/******/ var __webpack_exports__run = __webpack_exports__.eF;
+/******/ export { __webpack_exports__getLatestDigestThreadTimestamp as getLatestDigestThreadTimestamp, __webpack_exports__isNewer as isNewer, __webpack_exports__run as run };
 /******/ 
