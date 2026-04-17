@@ -77,21 +77,24 @@ describe('getThreadReplies', () => {
 });
 
 describe('isDigest', () => {
-  it('returns true for the resolved digest header text', () => {
-    const message = { text: 'All PRs are resolved! :tada:' };
+  const identity = { userId: 'U123', botId: 'B123' };
 
-    expect(isDigest(message)).toBe(true);
+  it('returns true for the resolved digest header text from the bot', () => {
+    const message = { text: 'All PRs are resolved! :tada:', bot_id: 'B123' };
+
+    expect(isDigest(message, identity)).toBe(true);
   });
 
-  it('returns true for the open digest header text', () => {
-    const message = { text: 'The following PRs are still open :thread:' };
+  it('returns true for the open digest header text from the bot', () => {
+    const message = { text: 'The following PRs are still open :thread:', bot_id: 'B123' };
 
-    expect(isDigest(message)).toBe(true);
+    expect(isDigest(message, identity)).toBe(true);
   });
 
-  it('returns true for a digest header block', () => {
+  it('returns true for a digest header block from the bot', () => {
     const message = {
       text: 'fallback',
+      bot_id: 'B123',
       blocks: [
         {
           type: 'header',
@@ -100,13 +103,19 @@ describe('isDigest', () => {
       ]
     };
 
-    expect(isDigest(message)).toBe(true);
+    expect(isDigest(message, identity)).toBe(true);
   });
 
   it('returns false for non-digest messages', () => {
-    const message = { text: 'A regular message', blocks: [] };
+    const message = { text: 'A regular message', blocks: [], bot_id: 'B123' };
 
-    expect(isDigest(message)).toBe(false);
+    expect(isDigest(message, identity)).toBe(false);
+  });
+
+  it('returns false for digest text from another user', () => {
+    const message = { text: 'All PRs are resolved! :tada:', user: 'U999' };
+
+    expect(isDigest(message, identity)).toBe(false);
   });
 });
 

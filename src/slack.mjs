@@ -100,11 +100,13 @@ export function getPermalink(channelId, messageTs) {
   }).then(response => response.permalink);
 }
 
-export function isDigest(message) {
+export function isDigest(message, identity) {
   const text = message.text;
   const headerBlockText = message.blocks?.find(block => block.type === 'header')?.text?.text;
 
-  return DIGEST_HEADER_TEXTS.includes(text) || DIGEST_HEADER_TEXTS.includes(headerBlockText);
+  return isOwnMessage(message, identity) && (
+    DIGEST_HEADER_TEXTS.includes(text) || DIGEST_HEADER_TEXTS.includes(headerBlockText)
+  );
 }
 
 export async function getBotIdentity() {
