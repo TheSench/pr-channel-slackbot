@@ -15,6 +15,16 @@ export function isNewer(messageTs, digestThreadTimestamp) {
   return Number.isFinite(currentTs) && Number.isFinite(previousTs) && currentTs > previousTs;
 }
 
+export function getLatestDigestThreadTimestamp(channelState, botIdentity, messages) {
+  let digestThreadTimestamp = channelState.lastDigestThreadTimestamp;
+  for (let message of messages) {
+    if (isDigest(message, botIdentity) && isNewer(message.ts, digestThreadTimestamp)) {
+      digestThreadTimestamp = message.ts;
+    }
+  }
+  return digestThreadTimestamp;
+}
+
 export async function run() {
   try {
     const { reactionConfig, channelConfig } = getConfig();
@@ -22,23 +32,18 @@ export async function run() {
     const stateFile = getInput('state-file');
 
     const state = loadState(stateFile);
+    const botIdentity = await getBotIdentity();
 
     for (let { channelId, limit, maxPages, trackUnresolved, enableReactionCopying, allowBotMessages } of channelConfig) {
       const channelState = getChannelState(state, channelId);
       const messages = await collectMessages(channelId, channelState, limit, maxPages, trackUnresolved);
-      const digestThreadMap = await buildDigestThreadMap(channelId, channelState.lastDigestThreadTimestamp);
-      const botIdentity = await getBotIdentity();
+      let lastDigestThreadTimestamp = getLatestDigestThreadTimestamp(channelState, botIdentity, messages);
+      const digestThreadMap = await buildDigestThreadMap(channelId, lastDigestThreadTimestamp);
 
       const messagesForDigest = [];
       const unresolvedTimestamps = [];
 
-      let digestThreadTimestamp = channelState.lastDigestThreadTimestamp;
-
       for (let message of messages) {
-        if (isDigest(message, botIdentity) && isNewer(message.ts, digestThreadTimestamp)) {
-          digestThreadTimestamp = message.ts;
-        }
-
         const pullRequests = extractPullRequests(message.text);
 
         if (!shouldProcess(message, pullRequests, reactionConfig, allowBotMessages)) {
@@ -67,16 +72,16 @@ export async function run() {
       }
 
       if (!skipDigest) {
-        digestThreadTimestamp = await postOpenPrs(channelId, messagesForDigest);
+        lastDigestThreadTimestamp = await postOpenPrs(channelId, messagesForDigest);
         if (channelState.lastDigestThreadTimestamp) {
-          await markThreadSuperseded(channelId, channelState.lastDigestThreadTimestamp, digestThreadTimestamp);
+          await markThreadSuperseded(channelId, channelState.lastDigestThreadTimestamp, lastDigestThreadTimestamp);
         }
       }
 
       if (trackUnresolved) {
         state[channelId] = {
           unresolvedMessageTimestamps: unresolvedTimestamps,
-          lastDigestThreadTimestamp: digestThreadTimestamp
+          lastDigestThreadTimestamp
         };
       }
     }

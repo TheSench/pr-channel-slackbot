@@ -37,7 +37,7 @@ vi.mock('./state.mjs', () => ({
 import { run, isNewer } from './index.mjs';
 import { getConfig, collectMessages, shouldProcess, getAggregateStatus, buildPrMessage, buildDigestThreadMap } from './workflow.mjs';
 import { loadState, saveState, getChannelState } from './state.mjs';
-import { postOpenPrs, addReaction, markThreadSuperseded } from './slack.mjs';
+import { postOpenPrs, addReaction, markThreadSuperseded, isDigest } from './slack.mjs';
 import { extractPullRequests } from './github.mjs';
 import { getBooleanInput, setFailed } from '@actions/core';
 
@@ -144,6 +144,27 @@ describe('run()', () => {
       await run();
 
       expect(addReaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('builds the digest thread map using the newest digest thread timestamp from fetched messages', async () => {
+      getConfig.mockReturnValue({
+        reactionConfig: { merged: ['merged'], closed: ['closed'] },
+        channelConfig: [{ ...BASE_CHANNEL, trackUnresolved: false }],
+      });
+      getChannelState.mockReturnValue({
+        unresolvedMessageTimestamps: [],
+        lastDigestThreadTimestamp: '123.0',
+      });
+      collectMessages.mockResolvedValue([
+        { ts: '124.0', text: 'regular message' },
+        { ts: '125.0', text: 'digest thread message' }
+      ]);
+      isDigest.mockImplementation((message) => message.ts === '125.0');
+      shouldProcess.mockReturnValue(false);
+
+      await run();
+
+      expect(buildDigestThreadMap).toHaveBeenCalledWith('C123', '125.0');
     });
   });
 
