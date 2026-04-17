@@ -9,7 +9,7 @@ vi.mock('@slack/web-api', () => ({
 }));
 vi.mock('@actions/core', () => ({ getInput: vi.fn(() => 'mock-token') }));
 
-import { getThreadReplies } from './slack.mjs';
+import { getThreadReplies, isDigest } from './slack.mjs';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -69,5 +69,39 @@ describe('getThreadReplies', () => {
     const result = await getThreadReplies('C123', '50.0');
 
     expect(result).toEqual([]);
+  });
+});
+
+describe('isDigest', () => {
+  it('returns true for the resolved digest header text', () => {
+    const message = { text: 'All PRs are resolved! :tada:' };
+
+    expect(isDigest(message)).toBe(true);
+  });
+
+  it('returns true for the open digest header text', () => {
+    const message = { text: 'The following PRs are still open :thread:' };
+
+    expect(isDigest(message)).toBe(true);
+  });
+
+  it('returns true for a digest header block', () => {
+    const message = {
+      text: 'fallback',
+      blocks: [
+        {
+          type: 'header',
+          text: { type: 'plain_text', text: 'The following PRs are still open :thread:' }
+        }
+      ]
+    };
+
+    expect(isDigest(message)).toBe(true);
+  });
+
+  it('returns false for non-digest messages', () => {
+    const message = { text: 'A regular message', blocks: [] };
+
+    expect(isDigest(message)).toBe(false);
   });
 });

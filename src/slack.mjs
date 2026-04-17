@@ -85,11 +85,26 @@ export async function getThreadReplies(channelId, threadTs) {
   return messages;
 }
 
+const DIGEST_HEADER_RESOLVED = 'All PRs are resolved! :tada:';
+const DIGEST_HEADER_OPEN = 'The following PRs are still open :thread:';
+
+const DIGEST_HEADER_TEXTS = [
+  DIGEST_HEADER_RESOLVED,
+  DIGEST_HEADER_OPEN
+];
+
 export function getPermalink(channelId, messageTs) {
   return slackClient().chat.getPermalink({
     channel: channelId,
     message_ts: messageTs
   }).then(response => response.permalink);
+}
+
+export function isDigest(message) {
+  const text = message.text;
+  const headerBlockText = message.blocks?.find(block => block.type === 'header')?.text?.text;
+
+  return DIGEST_HEADER_TEXTS.includes(text) || DIGEST_HEADER_TEXTS.includes(headerBlockText);
 }
 
 export async function postOpenPrs(channelId, messages) {
@@ -107,8 +122,8 @@ export async function postOpenPrs(channelId, messages) {
 
 async function postThreadHeader(channelId, prCount) {
   const header = (prCount === 0
-    ? 'All PRs are resolved! :tada:'
-    : 'The following PRs are still open :thread:');
+    ? DIGEST_HEADER_RESOLVED
+    : DIGEST_HEADER_OPEN);
   return slackClient().chat.postMessage({
     channel: channelId,
     text: header,
