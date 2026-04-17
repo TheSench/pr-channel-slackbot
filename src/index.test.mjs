@@ -19,6 +19,8 @@ vi.mock('./slack.mjs', () => ({
   addReaction: vi.fn(),
   postOpenPrs: vi.fn().mockResolvedValue('digest-ts'),
   markThreadSuperseded: vi.fn().mockResolvedValue(undefined),
+  isDigest: vi.fn(() => false),
+  getBotIdentity: vi.fn().mockResolvedValue({ userId: 'U123', botId: 'B123' }),
 }));
 vi.mock('./github.mjs', () => ({
   extractPullRequests: vi.fn(() => []),
@@ -32,10 +34,10 @@ vi.mock('./state.mjs', () => ({
   })),
 }));
 
-import { run } from './index.mjs';
+import { run, isNewer } from './index.mjs';
 import { getConfig, collectMessages, shouldProcess, getAggregateStatus, buildPrMessage, buildDigestThreadMap } from './workflow.mjs';
 import { loadState, saveState, getChannelState } from './state.mjs';
-import { postOpenPrs, addReaction, markThreadSuperseded } from './slack.mjs';
+import { postOpenPrs, addReaction, markThreadSuperseded, isDigest } from './slack.mjs';
 import { extractPullRequests } from './github.mjs';
 import { getBooleanInput, setFailed } from '@actions/core';
 
@@ -142,6 +144,27 @@ describe('run()', () => {
       await run();
 
       expect(addReaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('builds the digest thread map using the newest digest thread timestamp from fetched messages', async () => {
+      getConfig.mockReturnValue({
+        reactionConfig: { merged: ['merged'], closed: ['closed'] },
+        channelConfig: [{ ...BASE_CHANNEL, trackUnresolved: false }],
+      });
+      getChannelState.mockReturnValue({
+        unresolvedMessageTimestamps: [],
+        lastDigestThreadTimestamp: '123.0',
+      });
+      collectMessages.mockResolvedValue([
+        { ts: '124.0', text: 'regular message' },
+        { ts: '125.0', text: 'digest thread message' }
+      ]);
+      isDigest.mockImplementation((message) => message.ts === '125.0');
+      shouldProcess.mockReturnValue(false);
+
+      await run();
+
+      expect(buildDigestThreadMap).toHaveBeenCalledWith('C123', '125.0');
     });
   });
 
@@ -253,6 +276,25 @@ describe('run()', () => {
       await run();
 
       expect(setFailed).toHaveBeenCalledWith('Config not found');
+    });
+  });
+
+  describe('isNewer', () => {
+    it('returns true when there is no previous digest timestamp', () => {
+      expect(isNewer('123.0', null)).toBe(true);
+    });
+
+    it('returns true when the message timestamp is newer', () => {
+      expect(isNewer('124.0', '123.0')).toBe(true);
+    });
+
+    it('returns false when the message timestamp is older', () => {
+      expect(isNewer('122.0', '123.0')).toBe(false);
+    });
+
+    it('returns false when either timestamp is invalid', () => {
+      expect(isNewer('not-a-ts', '123.0')).toBe(false);
+      expect(isNewer('123.0', 'not-a-ts')).toBe(false);
     });
   });
 
