@@ -107,6 +107,18 @@ export function isDigest(message) {
   return DIGEST_HEADER_TEXTS.includes(text) || DIGEST_HEADER_TEXTS.includes(headerBlockText);
 }
 
+export async function getBotIdentity() {
+  const response = await slackClient().auth.test();
+  return {
+    userId: response.user_id,
+    botId: response.bot_id
+  };
+}
+
+export function isOwnMessage(message, identity) {
+  return (identity.botId && message.bot_id === identity.botId) || message.user === identity.userId;
+}
+
 export async function postOpenPrs(channelId, messages) {
   const headerResponse = await postThreadHeader(channelId, messages.length);
   if (messages.length === 0) return headerResponse.ts;

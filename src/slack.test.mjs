@@ -1,15 +1,19 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 const mockReplies = vi.hoisted(() => vi.fn());
+const mockAuthTest = vi.hoisted(() => vi.fn());
 
 vi.mock('@slack/web-api', () => ({
   WebClient: function() {
-    return { conversations: { replies: mockReplies } };
+    return {
+      auth: { test: mockAuthTest },
+      conversations: { replies: mockReplies }
+    };
   },
 }));
 vi.mock('@actions/core', () => ({ getInput: vi.fn(() => 'mock-token') }));
 
-import { getThreadReplies, isDigest } from './slack.mjs';
+import { getBotIdentity, getThreadReplies, isDigest, isOwnMessage } from './slack.mjs';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -103,5 +107,45 @@ describe('isDigest', () => {
     const message = { text: 'A regular message', blocks: [] };
 
     expect(isDigest(message)).toBe(false);
+  });
+});
+
+describe('getBotIdentity', () => {
+  it('returns the authenticated user and bot ids', async () => {
+    mockAuthTest.mockResolvedValueOnce({ user_id: 'U123', bot_id: 'B123' });
+
+    const identity = await getBotIdentity();
+
+    expect(identity).toEqual({ userId: 'U123', botId: 'B123' });
+    expect(mockAuthTest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('isOwnMessage', () => {
+  const identity = { userId: 'U123', botId: 'B123' };
+
+  it('returns true when the message bot_id matches the bot identity', () => {
+    const message = { bot_id: 'B123' };
+
+    expect(isOwnMessage(message, identity)).toBe(true);
+  });
+
+  it('returns true when the message user matches the user identity', () => {
+    const message = { user: 'U123' };
+
+    expect(isOwnMessage(message, identity)).toBe(true);
+  });
+
+  it('returns false for messages from other users', () => {
+    const message = { bot_id: 'B999', user: 'U999' };
+
+    expect(isOwnMessage(message, identity)).toBe(false);
+  });
+
+  it('works when the identity has no botId', () => {
+    const message = { bot_id: 'B123', user: 'U123' };
+    const identityWithoutBot = { userId: 'U123' };
+
+    expect(isOwnMessage(message, identityWithoutBot)).toBe(true);
   });
 });
