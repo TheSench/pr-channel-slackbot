@@ -95,6 +95,9 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v6  # Required to read the config file and write the state file
+        with:
+          # Use token with write access to bypass PR checks for state file commits
+          token: ${{ secrets.TOKEN_WITH_WRITE_ACCESS }}
 
       - name: Configure git user
         run: |
@@ -336,6 +339,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.TOKEN_WITH_WRITE_ACCESS }}
 
       - name: Configure git user
         run: |
