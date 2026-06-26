@@ -8,8 +8,8 @@
             "program": "${workspaceFolder}/src/index.mjs",
             "envFile": "${workspaceFolder}/.env",
             "env": {
-                "INPUT_CONFIG-FILE": "${workspaceFolder}/config.json",
-                "INPUT_STATE-FILE": "${workspaceFolder}/.github/pr-channel-state.json",
+                "INPUT_CONFIG-FILE": "${workspaceFolder}/local-testing/config.json",
+                "INPUT_STATE-FILE": "${workspaceFolder}/local-testing/pr-channel-state.json",
                 "GITHUB_WORKSPACE": "${workspaceFolder}"
             },
             "console": "internalConsole"

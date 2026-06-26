@@ -129,5 +129,4 @@ out
 .pnp.*
 
 # Test files
-config.json
-pr-channel-state.json
+local-testing/
