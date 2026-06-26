@@ -50056,7 +50056,7 @@ async function run() {
       for (let message of messages) {
         const pullRequests = (0,_github_mjs__WEBPACK_IMPORTED_MODULE_3__/* .extractPullRequests */ .nw)(message.text);
 
-        if (!(0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .shouldProcess */ .Vb)(message, pullRequests, reactionConfig, allowBotMessages)) {
+        if (!(0,_workflow_mjs__WEBPACK_IMPORTED_MODULE_1__/* .shouldProcess */ .Vb)(message, pullRequests, reactionConfig, allowBotMessages, botIdentity)) {
           continue;
         }
 
@@ -50613,8 +50613,9 @@ async function getAggregateStatus(pullRequests) {
  * @param {Array<PullRequest>} pullRequests
  * @param {ReactionConfig} reactionConfig
  * @param {boolean} allowBotMessages
+ * @param {{ userId: string, botId: string }} botIdentity
  */
-function shouldProcess(message, pullRequests, reactionConfig, allowBotMessages = false) {
+function shouldProcess(message, pullRequests, reactionConfig, allowBotMessages = false, botIdentity = null) {
   if (pullRequests.length === 0) {
     console.debug(`SKIPPING: ${message.ts} has no pull requests`);
     return false;
@@ -50627,7 +50628,7 @@ function shouldProcess(message, pullRequests, reactionConfig, allowBotMessages =
     return false;
   }
 
-  if (isResolved(message, reactionConfig)) {
+  if (isResolved(message, reactionConfig, botIdentity)) {
     console.debug(`SKIPPING: ${message.ts} is already resolved`);
     return false;
   }
@@ -50639,11 +50640,15 @@ function shouldProcess(message, pullRequests, reactionConfig, allowBotMessages =
 /**
  * @param {SlackMessage} message
  * @param {ReactionConfig} reactionConfig
+ * @param {{ userId: string, botId: string } | null} botIdentity
  */
-function isResolved(message, reactionConfig) {
+function isResolved(message, reactionConfig, botIdentity) {
   const resolvedStatuses = [...reactionConfig.merged, ...reactionConfig.closed];
 
-  return message.reactions?.some(reaction => resolvedStatuses.includes(reaction.name));
+  return message.reactions?.some(reaction =>
+    resolvedStatuses.includes(reaction.name) &&
+    (!botIdentity || reaction.users?.includes(botIdentity.userId))
+  );
 }
 
 /**

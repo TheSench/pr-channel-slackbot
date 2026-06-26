@@ -217,8 +217,9 @@ export async function getAggregateStatus(pullRequests) {
  * @param {Array<PullRequest>} pullRequests
  * @param {ReactionConfig} reactionConfig
  * @param {boolean} allowBotMessages
+ * @param {{ userId: string, botId: string }} botIdentity
  */
-export function shouldProcess(message, pullRequests, reactionConfig, allowBotMessages = false) {
+export function shouldProcess(message, pullRequests, reactionConfig, allowBotMessages = false, botIdentity = null) {
   if (pullRequests.length === 0) {
     console.debug(`SKIPPING: ${message.ts} has no pull requests`);
     return false;
@@ -231,7 +232,7 @@ export function shouldProcess(message, pullRequests, reactionConfig, allowBotMes
     return false;
   }
 
-  if (isResolved(message, reactionConfig)) {
+  if (isResolved(message, reactionConfig, botIdentity)) {
     console.debug(`SKIPPING: ${message.ts} is already resolved`);
     return false;
   }
@@ -243,11 +244,15 @@ export function shouldProcess(message, pullRequests, reactionConfig, allowBotMes
 /**
  * @param {SlackMessage} message
  * @param {ReactionConfig} reactionConfig
+ * @param {{ userId: string, botId: string } | null} botIdentity
  */
-function isResolved(message, reactionConfig) {
+function isResolved(message, reactionConfig, botIdentity) {
   const resolvedStatuses = [...reactionConfig.merged, ...reactionConfig.closed];
 
-  return message.reactions?.some(reaction => resolvedStatuses.includes(reaction.name));
+  return message.reactions?.some(reaction =>
+    resolvedStatuses.includes(reaction.name) &&
+    (!botIdentity || reaction.users?.includes(botIdentity.userId))
+  );
 }
 
 /**

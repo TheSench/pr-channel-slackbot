@@ -309,6 +309,6 @@ describe('run()', () => {
 
     await run();
 
-    expect(shouldProcess).toHaveBeenCalledWith(PR_MESSAGE, [{}], expect.any(Object), true);
+    expect(shouldProcess).toHaveBeenCalledWith(PR_MESSAGE, [{}], expect.any(Object), true, { userId: 'U123', botId: 'B123' });
   });
 });
