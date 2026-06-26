@@ -46,7 +46,7 @@ export async function run() {
       for (let message of messages) {
         const pullRequests = extractPullRequests(message.text);
 
-        if (!shouldProcess(message, pullRequests, reactionConfig, allowBotMessages)) {
+        if (!shouldProcess(message, pullRequests, reactionConfig, allowBotMessages, botIdentity)) {
           continue;
         }
 

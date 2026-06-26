@@ -264,6 +264,7 @@ describe('shouldProcess', () => {
     closed: ['x'],
     changesRequested: ['changes-requested'],
   };
+  const botIdentity = { userId: 'U123', botId: 'B123' };
 
   it('returns false when the message has no pull requests', () => {
     const message = { ts: '1.0', text: 'no PRs here' };
@@ -275,13 +276,23 @@ describe('shouldProcess', () => {
     expect(shouldProcess(message, [{}], reactionConfig)).toBe(false);
   });
 
-  it('returns false when the message already has a merged reaction', () => {
-    const message = { ts: '1.0', text: 'PR link', reactions: [{ name: 'white-check-mark' }] };
-    expect(shouldProcess(message, [{}], reactionConfig)).toBe(false);
+  it('returns false when the bot already added a merged reaction', () => {
+    const message = { ts: '1.0', text: 'PR link', reactions: [{ name: 'white-check-mark', users: ['U123'] }] };
+    expect(shouldProcess(message, [{}], reactionConfig, false, botIdentity)).toBe(false);
   });
 
-  it('returns false when the message already has a closed reaction', () => {
-    const message = { ts: '1.0', text: 'PR link', reactions: [{ name: 'x' }] };
+  it('returns false when the bot already added a closed reaction', () => {
+    const message = { ts: '1.0', text: 'PR link', reactions: [{ name: 'x', users: ['U123'] }] };
+    expect(shouldProcess(message, [{}], reactionConfig, false, botIdentity)).toBe(false);
+  });
+
+  it('returns true when a resolved reaction was added by someone other than the bot', () => {
+    const message = { ts: '1.0', text: 'PR link', reactions: [{ name: 'white-check-mark', users: ['U999'] }] };
+    expect(shouldProcess(message, [{}], reactionConfig, false, botIdentity)).toBe(true);
+  });
+
+  it('returns false when a resolved reaction exists and no botIdentity is provided', () => {
+    const message = { ts: '1.0', text: 'PR link', reactions: [{ name: 'white-check-mark' }] };
     expect(shouldProcess(message, [{}], reactionConfig)).toBe(false);
   });
 
