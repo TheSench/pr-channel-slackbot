@@ -50543,7 +50543,7 @@ async function collectMessages(channelId, channelState, limit, maxPages, trackUn
   );
 
   const trackedMessages = trackUnresolved
-    ? await fetchTrackedMessages(channelId, unresolvedMessageTimestamps, new Set(allMessages.map(m => m.ts)))
+    ? await fetchTrackedMessages(channelId, unresolvedMessageTimestamps, new Set(postDigestMessages.map(m => m.ts)))
     : [];
 
   const result = [...postDigestMessages, ...trackedMessages]

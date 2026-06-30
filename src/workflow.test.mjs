@@ -206,20 +206,38 @@ describe('collectMessages', () => {
       expect(getMessagePage).toHaveBeenCalledTimes(1);
     });
 
-    it('skips individually fetching timestamps already retrieved via pagination', async () => {
+    it('skips individually fetching timestamps already present in post-digest paginated results', async () => {
       getMessagePage.mockResolvedValueOnce({
-        messages: [newMessage, oldMessage, { ts: DIGEST_TS }],
+        messages: [newMessage, { ts: DIGEST_TS }],
         nextCursor: null,
       });
 
       const channelState = {
         lastDigestThreadTimestamp: DIGEST_TS,
-        unresolvedMessageTimestamps: [OLD_TS], // OLD_TS is already in the paginated results
+        unresolvedMessageTimestamps: [NEW_TS], // NEW_TS is already in postDigestMessages
       };
 
       await collectMessages('C123', channelState, 50, 1, true);
 
       expect(getMessageByTimestamp).not.toHaveBeenCalled();
+    });
+
+    it('individually fetches tracked timestamps that appear in pagination but predate the digest anchor', async () => {
+      getMessagePage.mockResolvedValueOnce({
+        messages: [newMessage, oldMessage, { ts: DIGEST_TS }],
+        nextCursor: null,
+      });
+      getMessageByTimestamp.mockResolvedValueOnce(oldMessage);
+
+      const channelState = {
+        lastDigestThreadTimestamp: DIGEST_TS,
+        unresolvedMessageTimestamps: [OLD_TS], // OLD_TS is in allMessages but before the digest
+      };
+
+      const result = await collectMessages('C123', channelState, 50, 1, true);
+
+      expect(getMessageByTimestamp).toHaveBeenCalledWith('C123', OLD_TS);
+      expect(result).toContainEqual(oldMessage);
     });
 
     it('excludes tracked messages that have since been deleted', async () => {
